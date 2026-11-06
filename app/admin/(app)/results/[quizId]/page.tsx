@@ -389,6 +389,8 @@ async function ResultsContent({ params }: { params: Promise<{ quizId: string }> 
             </tbody>
           </table>
         </div>
+
+        <StudentErrorReports questions={r.questions} />
       </Section>
 
       {/* 4. Final survey */}
@@ -535,5 +537,39 @@ function StudentsVsExperts({ r }: { r: Results }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/** What students wrote when they flagged a question as having an error. */
+function StudentErrorReports({ questions }: { questions: Results["questions"] }) {
+  const withNotes = questions.filter((q) => q.students && q.students.errorNotes.length > 0);
+  const total = withNotes.reduce((n, q) => n + q.students!.errorNotes.length, 0);
+  return (
+    <details className="mt-6 rounded-md border-2 border-line bg-field p-3" open={total > 0 && total <= 8}>
+      <summary className="cursor-pointer text-sm font-semibold">
+        What students said was wrong <span className="font-normal text-stone-500">({total})</span>
+      </summary>
+      {total === 0 ? (
+        <p className="mt-2 text-sm text-stone-500">No written error reports yet. Students can add a reason when they flag a question.</p>
+      ) : (
+        <ul className="mt-3 space-y-4">
+          {withNotes.map((q) => (
+            <li key={q.id}>
+              <p className="text-sm font-semibold text-ink">
+                Q{q.surveyNumber}. <span className="font-normal">{q.question}</span>{" "}
+                <Verdict v={q.expertVerdict} />
+              </p>
+              <ul className="mt-1.5 space-y-1.5 text-sm text-stone-700">
+                {q.students!.errorNotes.map((note, i) => (
+                  <li key={i} className="border-l-2 border-amber-400 pl-2">
+                    {note}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }

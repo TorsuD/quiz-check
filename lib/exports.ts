@@ -34,6 +34,7 @@ export async function buildResponsesCsvRows(quizId: string) {
     "usefulness",
     "perceivedAccuracy",
     "flaggedError",
+    "errorNote",
     "answeredAt",
     "ratedAt",
   ];
@@ -58,6 +59,7 @@ export async function buildResponsesCsvRows(quizId: string) {
         r?.usefulness,
         r?.perceivedAccuracy,
         r ? (r.flaggedError ? 1 : 0) : "",
+        r?.errorNote ?? "",
         r?.answeredAt,
         r?.ratedAt,
       ];
@@ -143,6 +145,7 @@ export async function buildFullCsvRows(quizId: string) {
     "studentMeanUsefulness",
     "studentMeanPerceivedAccuracy",
     "studentsFlaggedErrorPct",
+    "studentErrorNotes",
   ];
 
   const rows = r.questions.map((q) => {
@@ -180,6 +183,7 @@ export async function buildFullCsvRows(quizId: string) {
       s ? round(s.usefulness) : "",
       s ? round(s.perceivedAccuracy) : "",
       s ? round(s.flaggedPct, 1) : "",
+      s ? s.errorNotes.join(" | ") : "",
     ];
   });
   return { headers, rows };

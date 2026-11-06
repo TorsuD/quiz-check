@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { GenerateEvent } from "@/app/api/admin/generate/route";
 import { SYSTEM_PROMPT, buildUserPrompt } from "@/lib/prompts";
 import { parseJsonLoose } from "@/lib/text";
+import { toast } from "@/components/toast";
 
 type Source = "llm" | "import";
 type NotesMode = "pdf" | "text";
@@ -132,7 +133,12 @@ export default function GenerateForm() {
 
   async function copyPrompt() {
     const prompt = `${SYSTEM_PROMPT}\n\n${buildUserPrompt(title.trim() || "Untitled lecture", notesText, count)}`;
-    await navigator.clipboard.writeText(prompt);
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch {
+      return toast.error("Couldn't copy to the clipboard. Check the browser's clipboard permission.");
+    }
+    toast("Prompt copied. Paste it into your chatbot.");
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }

@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { deleteLecture, publishQuiz, removeQuestion, restoreQuestion } from "@/app/admin/actions";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { TrashIcon } from "@/components/icons";
+import { toast } from "@/components/toast";
 
 const QUICK_REASONS = ["Factually incorrect", "Wrong answer key", "Ambiguous wording", "Too trivial", "Off-topic", "Duplicate"];
 
@@ -21,13 +23,13 @@ export function RemoveControls({ questionId, removed }: { questionId: string; re
           onClick={() =>
             startTransition(async () => {
               const res = await restoreQuestion(questionId);
-              if (res?.error) setError(res.error);
+              if (res?.error) toast.error(res.error);
+              else toast("Question restored.");
             })
           }
         >
           {pending ? "Restoring…" : "Restore question"}
         </button>
-        {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
       </div>
     );
   }
@@ -78,7 +80,10 @@ export function RemoveControls({ questionId, removed }: { questionId: string; re
             startTransition(async () => {
               const res = await removeQuestion(questionId, reason);
               if (res?.error) setError(res.error);
-              else setOpen(false);
+              else {
+                setOpen(false);
+                toast("Question removed. Your reason was saved.");
+              }
             })
           }
         >
@@ -94,24 +99,34 @@ export function RemoveControls({ questionId, removed }: { questionId: string; re
 
 export function PublishButton({ lectureId, disabled, count }: { lectureId: string; disabled: boolean; count: number }) {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   return (
-    <div className="text-right">
-      <button
-        className="btn-primary"
-        disabled={disabled || pending}
-        onClick={() => {
-          if (!confirm(`Publish ${count} questions as a survey? The set will be locked after publishing.`)) return;
-          startTransition(async () => {
-            const res = await publishQuiz(lectureId);
-            if (res?.error) setError(res.error);
-          });
-        }}
-      >
+    <>
+      <button className="btn-primary" disabled={disabled || pending} onClick={() => setConfirming(true)}>
         {pending ? "Publishing…" : `Publish ${count} questions as survey`}
       </button>
-      {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
-    </div>
+      <ConfirmDialog
+        open={confirming}
+        title={`Publish ${count} question${count === 1 ? "" : "s"}?`}
+        confirmLabel={pending ? "Publishing…" : "Publish survey"}
+        pending={pending}
+        onClose={() => setConfirming(false)}
+        onConfirm={() =>
+          startTransition(async () => {
+            const res = await publishQuiz(lectureId); // redirects to the survey page on success
+            if (res?.error) {
+              setConfirming(false);
+              toast.error(res.error);
+            }
+          })
+        }
+      >
+        <p>Students will be able to join with the QR code straight away.</p>
+        <p className="mt-2">
+          The set is then <strong className="text-ink">locked</strong>: questions can no longer be removed or restored.
+        </p>
+      </ConfirmDialog>
+    </>
   );
 }
 

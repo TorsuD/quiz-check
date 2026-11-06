@@ -328,3 +328,17 @@
 @utility highlight {
   @apply bg-yellow-300 px-1 box-decoration-clone;
 }
+
+/* Toasts slide up and fade in; no motion for people who ask for less. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@utility toast-in {
+  animation: toast-in 180ms ease-out;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}

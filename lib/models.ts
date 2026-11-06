@@ -137,6 +137,8 @@ export interface QuestionResponseDoc extends Timestamps {
   usefulness: number | null;
   perceivedAccuracy: number | null;
   flaggedError: boolean;
+  /** Optional reason the student gave when flagging an error. */
+  errorNote: string | null;
   ratedAt: Date | null;
 }
 const rating = { type: Number, min: 1, max: 5, default: null };
@@ -153,6 +155,7 @@ const questionResponseSchema = new Schema<QuestionResponseDoc>(
     usefulness: rating,
     perceivedAccuracy: rating,
     flaggedError: { type: Boolean, default: false },
+    errorNote: { type: String, default: null, trim: true, maxlength: 1000 },
     ratedAt: { type: Date, default: null },
   },
   { timestamps: true },

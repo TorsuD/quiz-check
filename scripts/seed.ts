@@ -195,6 +195,12 @@ async function seedResults(quizId: mongoose.Types.ObjectId, questionIds: mongoos
     ),
   );
 
+  const SAMPLE_ERROR_NOTES = [
+    "I think option B could also be correct.",
+    "The notes don't say this exactly.",
+    "",
+  ].map((n) => n || null);
+
   // Students: [selected option per survey question] and [clarity, difficulty, usefulness, perceivedAccuracy, flagged]
   const surveyQs = questionIds.slice(0, 4);
   const correct = QUESTIONS.slice(0, 4).map((q) => q.correctIndex);
@@ -223,6 +229,7 @@ async function seedResults(quizId: mongoose.Types.ObjectId, questionIds: mongoos
           quizId, questionId, participantId,
           selectedIndex: picks[s][i], isCorrect: picks[s][i] === correct[i], answeredAt: at,
           clarity, difficulty, usefulness, perceivedAccuracy, flaggedError, ratedAt: at,
+          errorNote: flaggedError ? SAMPLE_ERROR_NOTES[(s + i) % SAMPLE_ERROR_NOTES.length] : null,
         };
       }),
     );

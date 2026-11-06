@@ -48,6 +48,8 @@ export type StudentStats = {
   usefulness: number | null;
   perceivedAccuracy: number | null;
   flaggedPct: number | null;
+  /** Reasons students wrote when flagging this question (empty notes left out). */
+  errorNotes: string[];
 };
 
 export type QuestionResult = {
@@ -126,6 +128,7 @@ export async function computeResults(quizId: string) {
         usefulness: avg("usefulness"),
         perceivedAccuracy: avg("perceivedAccuracy"),
         flaggedPct: pct(rated.filter((r) => r.flaggedError).length, rated.length),
+        errorNotes: rated.filter((r) => r.flaggedError && r.errorNote).map((r) => r.errorNote!),
       };
     }
 

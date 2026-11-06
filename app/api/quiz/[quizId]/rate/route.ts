@@ -11,19 +11,25 @@ const Body = z.object({
   usefulness: score,
   perceivedAccuracy: score,
   flaggedError: z.boolean(),
+  errorNote: z.string().trim().max(1000).optional(),
 });
 
 export async function POST(request: Request, ctx: RouteContext<"/api/quiz/[quizId]/rate">) {
   const { quizId } = await ctx.params;
   const parsed = Body.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return jsonError("Please answer all four rating scales.");
+  if (!parsed.success) {
+    const tooLong = parsed.error.issues.some((i) => i.path[0] === "errorNote");
+    return jsonError(tooLong ? "Please keep the error description under 1000 characters." : "Please answer all four rating scales.");
+  }
   const auth = await requireParticipant(quizId);
   if ("error" in auth) return auth.error;
 
-  const { questionId, ...ratings } = parsed.data;
+  const { questionId, errorNote, ...ratings } = parsed.data;
+  // The note only means something when the question is flagged; an empty note is stored as null.
+  const note = ratings.flaggedError && errorNote ? errorNote : null;
   const updated = await QuestionResponse.findOneAndUpdate(
     { quizId, participantId: auth.participantId, questionId },
-    { $set: { ...ratings, ratedAt: new Date() } },
+    { $set: { ...ratings, errorNote: note, ratedAt: new Date() } },
     { returnDocument: "after" },
   ).lean();
   if (!updated) return jsonError("Answer the question before rating it.", 409);

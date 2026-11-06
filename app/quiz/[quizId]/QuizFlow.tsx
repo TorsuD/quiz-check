@@ -240,6 +240,7 @@ function QuestionStep({
   const [selected, setSelected] = useState<number | null>(answer?.selectedIndex ?? null);
   const [ratings, setRatings] = useState<Ratings>(EMPTY_RATINGS);
   const [flagged, setFlagged] = useState(false);
+  const [errorNote, setErrorNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -269,7 +270,12 @@ function QuestionStep({
     setBusy(true);
     setError(null);
     try {
-      await postJSON(`/api/quiz/${quizId}/rate`, { questionId: question.id, ...ratings, flaggedError: flagged });
+      await postJSON(`/api/quiz/${quizId}/rate`, {
+        questionId: question.id,
+        ...ratings,
+        flaggedError: flagged,
+        errorNote: flagged ? errorNote.trim() || undefined : undefined,
+      });
       onRated();
     } catch (e) {
       setError((e as Error).message);
@@ -390,6 +396,22 @@ function QuestionStep({
               <span className="flex-1 text-[15px]">I think this question has an error</span>
               <FlagIcon className={flagged ? "text-amber-500" : "text-stone-300"} />
             </label>
+            {flagged && (
+              <div>
+                <label htmlFor={`error-note-${question.id}`} className="mb-1 block text-sm font-medium text-stone-700">
+                  What&apos;s wrong with it? <span className="font-normal text-stone-500">(optional)</span>
+                </label>
+                <textarea
+                  id={`error-note-${question.id}`}
+                  rows={3}
+                  maxLength={1000}
+                  value={errorNote}
+                  onChange={(e) => setErrorNote(e.target.value)}
+                  placeholder="e.g. Two of the options are correct, or the notes say something different."
+                  className="input text-[15px]"
+                />
+              </div>
+            )}
           </div>
           <button onClick={submitRatings} disabled={!allRated || busy} className="btn-primary mt-6 min-h-12 w-full text-base">
             {busy ? "Saving…" : isLast ? "Continue to final questions" : "Next question"}
