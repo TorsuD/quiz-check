@@ -21,3 +21,15 @@ export const SURVEY = {
   helpfulText: "What made a question helpful?",
   unhelpfulText: "What made a question unhelpful or confusing?",
 } as const;
+
+/** Problem categories an expert reviewer can tag on a question (Phase 2). */
+export const ERROR_TAGS = [
+  "hallucination",
+  "wrong answer key",
+  "ambiguous wording",
+  "multiple correct options",
+  "too trivial",
+  "off-topic",
+  "other",
+] as const;
+export type ErrorTag = (typeof ERROR_TAGS)[number];

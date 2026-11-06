@@ -17,6 +17,9 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 export type LLMResult = { text: string; provider: Provider; model: string };
 
+/** Called with the full text received so far, each time more of the response streams in. */
+export type OnText = (soFar: string) => void;
+
 const DEFAULT_MODELS: Record<Provider, string> = {
   anthropic: "claude-opus-5-5",
   openai: "gpt-4o",
@@ -38,15 +41,16 @@ export function getLLMConfig(): { provider: Provider; model: string; apiKey: str
   return { provider, model, apiKey };
 }
 
-export async function complete(system: string, messages: ChatTurn[]): Promise<LLMResult> {
+/** All providers stream, so progress can be reported while the questions are being written. */
+export async function complete(system: string, messages: ChatTurn[], onText: OnText = () => {}): Promise<LLMResult> {
   const { provider, model, apiKey } = getLLMConfig();
   switch (provider) {
     case "anthropic":
-      return completeAnthropic(apiKey, model, system, messages);
+      return completeAnthropic(apiKey, model, system, messages, onText);
     case "openai":
-      return completeOpenAI(apiKey, model, system, messages);
+      return completeOpenAI(apiKey, model, system, messages, onText);
     case "gemini":
-      return completeGemini(apiKey, model, system, messages);
+      return completeGemini(apiKey, model, system, messages, onText);
   }
 }
 
@@ -55,6 +59,7 @@ async function completeAnthropic(
   model: string,
   system: string,
   messages: ChatTurn[],
+  onText: OnText,
 ): Promise<LLMResult> {
   const client = new Anthropic({ apiKey });
   const useFallback = ANTHROPIC_FALLBACK_MODELS.has(model);
@@ -68,6 +73,7 @@ async function completeAnthropic(
       ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
       : {}),
   });
+  stream.on("text", (_delta, snapshot) => onText(snapshot));
   const message = await stream.finalMessage();
   if (message.stop_reason === "refusal") {
     throw new Error("The model declined to generate questions for this content.");
@@ -87,18 +93,31 @@ async function completeOpenAI(
   model: string,
   system: string,
   messages: ChatTurn[],
+  onText: OnText,
 ): Promise<LLMResult> {
   const client = new OpenAI({ apiKey });
-  const res = await client.chat.completions.create({
+  const stream = await client.chat.completions.create({
     model,
+    stream: true,
     response_format: { type: "json_object" },
     messages: [{ role: "system", content: system }, ...messages],
   });
-  const choice = res.choices[0];
-  if (choice?.finish_reason === "length") {
+  let text = "";
+  let finish: string | null | undefined = null;
+  let usedModel = model;
+  for await (const chunk of stream) {
+    usedModel = chunk.model || usedModel;
+    const choice = chunk.choices[0];
+    if (choice?.delta?.content) {
+      text += choice.delta.content;
+      onText(text);
+    }
+    if (choice?.finish_reason) finish = choice.finish_reason;
+  }
+  if (finish === "length") {
     throw new Error("The model's output was cut off. Try fewer questions.");
   }
-  return { text: choice?.message?.content ?? "", provider: "openai", model: res.model ?? model };
+  return { text, provider: "openai", model: usedModel };
 }
 
 async function completeGemini(
@@ -106,9 +125,10 @@ async function completeGemini(
   model: string,
   system: string,
   messages: ChatTurn[],
+  onText: OnText,
 ): Promise<LLMResult> {
   const ai = new GoogleGenAI({ apiKey });
-  const res = await ai.models.generateContent({
+  const stream = await ai.models.generateContentStream({
     model,
     // Gemini calls the assistant role "model".
     contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
@@ -117,12 +137,24 @@ async function completeGemini(
       responseMimeType: "application/json",
     },
   });
-  const finish = res.candidates?.[0]?.finishReason;
+  let text = "";
+  let finish: FinishReason | undefined;
+  let blocked = false;
+  let usedModel = model;
+  for await (const chunk of stream) {
+    if (chunk.text) {
+      text += chunk.text;
+      onText(text);
+    }
+    finish = chunk.candidates?.[0]?.finishReason ?? finish;
+    if (chunk.promptFeedback?.blockReason) blocked = true;
+    usedModel = chunk.modelVersion ?? usedModel;
+  }
   if (finish === FinishReason.MAX_TOKENS) {
     throw new Error("The model's output was cut off. Try fewer questions.");
   }
-  if (finish === FinishReason.SAFETY || res.promptFeedback?.blockReason) {
+  if (finish === FinishReason.SAFETY || blocked) {
     throw new Error("The model declined to generate questions for this content.");
   }
-  return { text: res.text ?? "", provider: "gemini", model: res.modelVersion ?? model };
+  return { text, provider: "gemini", model: usedModel };
 }

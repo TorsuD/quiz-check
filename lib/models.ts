@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose";
+import { ERROR_TAGS, type ErrorTag } from "./constants";
 
 /*
  * Data model. All collections have createdAt / updatedAt timestamps.
@@ -188,16 +189,8 @@ surveyResponseSchema.index({ quizId: 1, participantId: 1 }, { unique: true });
 export const SurveyResponse = model("SurveyResponse", surveyResponseSchema);
 
 // ---------- ExpertReview (used in Phase 2) ----------
-export const ERROR_TAGS = [
-  "hallucination",
-  "wrong answer key",
-  "ambiguous wording",
-  "multiple correct options",
-  "too trivial",
-  "off-topic",
-  "other",
-] as const;
-export type ErrorTag = (typeof ERROR_TAGS)[number];
+// The tag list lives in lib/constants.ts so client components can use it without importing mongoose.
+export { ERROR_TAGS, type ErrorTag };
 export interface ExpertReviewDoc extends Timestamps {
   _id: Types.ObjectId;
   quizId: Types.ObjectId;

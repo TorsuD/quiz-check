@@ -1,7 +1,9 @@
 import "server-only";
+import { REVIEWERS } from "@/config/reviewers";
 import { LETTERS } from "./constants";
 import { Participant, QuestionResponse, SurveyResponse } from "./models";
 import { loadQuizBundle } from "./quiz";
+import { computeResults, isAccurate } from "./results";
 
 /** One row per participant per question (blank cells where the participant did not answer). */
 export async function buildResponsesCsvRows(quizId: string) {
@@ -91,5 +93,94 @@ export async function buildSurveyCsvRows(quizId: string) {
     s.unhelpfulText,
     s.createdAt,
   ]);
+  return { headers, rows };
+}
+
+/**
+ * Full analysis export: one row per GENERATED question (including removed ones), with both
+ * reviewers' scores side by side, their agreement, and the students' aggregate results.
+ */
+export async function buildFullCsvRows(quizId: string) {
+  const r = await computeResults(quizId);
+  if (!r) return null;
+  const round = (v: number | null, dp = 2) => (v === null ? "" : Number(v.toFixed(dp)));
+  const [ra, rb] = REVIEWERS.map((x) => x.id);
+
+  const reviewerHeaders = REVIEWERS.flatMap(({ id }) => [
+    `reviewer${id}_factuallyCorrect`,
+    `reviewer${id}_answerKeyCorrect`,
+    `reviewer${id}_accurate`,
+    `reviewer${id}_relevance`,
+    `reviewer${id}_clarity`,
+    `reviewer${id}_errorTags`,
+    `reviewer${id}_note`,
+  ]);
+  const headers = [
+    "quizId",
+    "questionNumber",
+    "surveyQuestionNumber",
+    "questionId",
+    "question",
+    "optionA",
+    "optionB",
+    "optionC",
+    "optionD",
+    "correctOption",
+    "llmDifficulty",
+    "removedBeforeSurvey",
+    "removalReason",
+    "excerptFoundInText",
+    ...reviewerHeaders,
+    "bothReviewed",
+    "reviewersAgreeOnVerdict",
+    "expertVerdict",
+    "expertAccuracyScore",
+    "studentsAnswered",
+    "studentsCorrectPct",
+    "studentsRated",
+    "studentMeanClarity",
+    "studentMeanDifficulty",
+    "studentMeanUsefulness",
+    "studentMeanPerceivedAccuracy",
+    "studentsFlaggedErrorPct",
+  ];
+
+  const rows = r.questions.map((q) => {
+    const a = q.reviews[ra];
+    const b = q.reviews[rb];
+    const both = Boolean(a && b);
+    const s = q.students;
+    return [
+      r.quiz.id,
+      q.number,
+      q.surveyNumber ?? "",
+      q.id,
+      q.question,
+      ...[0, 1, 2, 3].map((i) => q.options[i] ?? ""),
+      LETTERS[q.correctIndex] ?? "",
+      q.llmDifficulty,
+      q.removed,
+      q.removalReason ?? "",
+      q.excerptFound,
+      ...REVIEWERS.flatMap(({ id }) => {
+        const rv = q.reviews[id];
+        return rv
+          ? [rv.factuallyCorrect, rv.answerKeyCorrect, isAccurate(rv), rv.relevance, rv.clarity, rv.errorTags.join("; "), rv.otherNote]
+          : ["", "", "", "", "", "", ""];
+      }),
+      both,
+      both ? isAccurate(a!) === isAccurate(b!) : "",
+      q.expertVerdict ?? "",
+      round(q.expertScore),
+      s?.answered ?? "",
+      s ? round(s.correctPct, 1) : "",
+      s?.rated ?? "",
+      s ? round(s.clarity) : "",
+      s ? round(s.difficulty) : "",
+      s ? round(s.usefulness) : "",
+      s ? round(s.perceivedAccuracy) : "",
+      s ? round(s.flaggedPct, 1) : "",
+    ];
+  });
   return { headers, rows };
 }
