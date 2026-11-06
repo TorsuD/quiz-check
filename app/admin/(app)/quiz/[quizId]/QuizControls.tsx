@@ -7,12 +7,7 @@ export function OpenToggle({ quizId, isOpen }: { quizId: string; isOpen: boolean
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="flex items-center gap-3">
-      <span
-        className={`rounded-full px-3 py-1 text-sm font-medium ${isOpen ? "bg-emerald-100 text-emerald-800" : "bg-stone-200 text-stone-700"}`}
-      >
-        {isOpen ? "Open for responses" : "Closed"}
-      </span>
+    <div className="flex flex-wrap items-center gap-3">
       <button
         className={isOpen ? "btn-secondary" : "btn-primary"}
         disabled={pending}
@@ -25,7 +20,7 @@ export function OpenToggle({ quizId, isOpen }: { quizId: string; isOpen: boolean
       >
         {pending ? "Saving…" : isOpen ? "Close survey" : "Open survey"}
       </button>
-      {error && <span className="text-sm text-red-700">{error}</span>}
+      {error && <span className="text-sm text-rose-700">{error}</span>}
     </div>
   );
 }
@@ -33,17 +28,19 @@ export function OpenToggle({ quizId, isOpen }: { quizId: string; isOpen: boolean
 export function CopyLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-3">
-      <p className="font-mono text-xs break-all text-stone-600">{url}</p>
+    <div className="mt-3 flex items-center gap-2">
+      <p className="min-w-0 flex-1 truncate text-left font-mono text-xs text-stone-500" title={url}>
+        {url.replace(/^https?:\/\//, "")}
+      </p>
       <button
-        className="btn-secondary mt-2 w-full"
+        className="btn-secondary shrink-0 px-2.5 py-1 text-xs"
         onClick={async () => {
           await navigator.clipboard.writeText(url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
       >
-        {copied ? "Copied!" : "Copy link"}
+        {copied ? "Copied!" : "Copy"}
       </button>
     </div>
   );
