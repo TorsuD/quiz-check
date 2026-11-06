@@ -5,7 +5,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { connectDB } from "@/lib/db";
-import { Lecture, Question, Quiz } from "@/lib/models";
+import { ExpertReview, Lecture, Participant, Question, QuestionResponse, Quiz, SurveyResponse } from "@/lib/models";
 
 type ActionResult = { error: string } | undefined;
 
@@ -71,4 +71,30 @@ export async function setQuizOpen(quizId: string, open: boolean): Promise<Action
   const res = await Quiz.updateOne({ _id: quizId }, { $set: { isOpen: open } });
   if (res.matchedCount === 0) return { error: "Quiz not found." };
   refresh();
+}
+
+/**
+ * Hard delete: removes the lecture and everything that hangs off it (questions, the published
+ * survey, student answers, final-survey responses and expert reviews). This cannot be undone,
+ * so the admin must type the lecture title to confirm.
+ */
+export async function deleteLecture(lectureId: string, confirmTitle: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!isValidObjectId(lectureId)) return { error: "Lecture not found." };
+  await connectDB();
+  const lecture = await Lecture.findById(lectureId, { title: 1 }).lean();
+  if (!lecture) return { error: "Lecture not found." };
+  if (confirmTitle.trim() !== lecture.title.trim()) return { error: "The title you typed doesn't match." };
+
+  const quizIds = (await Quiz.find({ lectureId }, { _id: 1 }).lean()).map((q) => q._id);
+  const byQuiz = { quizId: { $in: quizIds } };
+  await Promise.all([
+    QuestionResponse.deleteMany(byQuiz),
+    SurveyResponse.deleteMany(byQuiz),
+    ExpertReview.deleteMany(byQuiz),
+    Participant.deleteMany(byQuiz),
+  ]);
+  await Promise.all([Quiz.deleteMany({ lectureId }), Question.deleteMany({ lectureId })]);
+  await Lecture.deleteOne({ _id: lectureId });
+  redirect("/admin");
 }
