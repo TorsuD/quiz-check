@@ -43,7 +43,7 @@ export default function LoginForm() {
           className="input"
         />
       </div>
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <button type="submit" disabled={busy || !password} className="btn-primary w-full">
         {busy ? "Signing in…" : "Sign in"}
       </button>
