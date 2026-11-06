@@ -3,6 +3,7 @@
  * and an open published quiz, so the UI can be tested without calling the LLM.
  *
  *   npm run seed
+ *   npm run seed -- --with-results   # also adds sample expert reviews and student responses
  *
  * Re-running replaces the previous sample (only documents belonging to the sample lecture).
  */
@@ -144,10 +145,105 @@ async function main() {
     publishedAt: new Date(),
   });
 
+  if (process.argv.includes("--with-results")) {
+    await seedResults(quiz._id, questions.map((q) => q._id));
+    console.log("Added sample expert reviews, 8 student attempts and 6 final surveys.");
+  }
+
   const base = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
   console.log(`Seeded lecture ${lecture._id} with ${questions.length} questions (1 removed).`);
   console.log(`Student quiz: ${base}/quiz/${quiz._id}`);
   console.log(`Admin view:   ${base}/admin/quiz/${quiz._id}`);
+  console.log(`Results:      ${base}/admin/results/${quiz._id}`);
+}
+
+/**
+ * Fake but plausible data so the results dashboard can be explored before a real class.
+ * Reviewer A and B disagree on question 4 on purpose, to show the disagreement list.
+ */
+async function seedResults(quizId: mongoose.Types.ObjectId, questionIds: mongoose.Types.ObjectId[]) {
+  type R = [factual: "yes" | "partially" | "no", key: "yes" | "no", relevance: number, clarity: number, tags: string[], note: string];
+  const reviews: Record<"A" | "B", R[]> = {
+    A: [
+      ["yes", "yes", 5, 5, [], ""],
+      ["yes", "yes", 5, 4, [], ""],
+      ["yes", "yes", 4, 4, [], ""],
+      ["partially", "yes", 4, 3, ["ambiguous wording"], "“Depends on another non-key attribute” could also describe a partial dependency."],
+      ["yes", "no", 3, 5, ["wrong answer key"], "Notes say Codd; key marks Boyce."],
+    ],
+    B: [
+      ["yes", "yes", 5, 5, [], ""],
+      ["yes", "yes", 5, 5, [], ""],
+      ["yes", "yes", 5, 4, [], ""],
+      ["yes", "yes", 4, 4, [], ""],
+      ["yes", "no", 2, 4, ["wrong answer key", "too trivial"], ""],
+    ],
+  };
+  await ExpertReview.insertMany(
+    (["A", "B"] as const).flatMap((reviewer) =>
+      reviews[reviewer].map(([factuallyCorrect, answerKeyCorrect, relevance, clarity, errorTags, otherNote], i) => ({
+        quizId,
+        questionId: questionIds[i],
+        reviewer,
+        factuallyCorrect,
+        answerKeyCorrect,
+        relevance,
+        clarity,
+        errorTags,
+        otherNote,
+      })),
+    ),
+  );
+
+  // Students: [selected option per survey question] and [clarity, difficulty, usefulness, perceivedAccuracy, flagged]
+  const surveyQs = questionIds.slice(0, 4);
+  const correct = QUESTIONS.slice(0, 4).map((q) => q.correctIndex);
+  const picks = [
+    [0, 0, 2, 1], [0, 0, 2, 2], [0, 0, 0, 1], [0, 1, 2, 2],
+    [0, 0, 2, 1], [1, 0, 2, 0], [0, 0, 1, 1], [0, 0, 2, 2],
+  ];
+  const ratings: [number, number, number, number, boolean][][] = picks.map((_, s) => [
+    [5, 1 + (s % 2), 4 + (s % 2), 5, false],
+    [5, 2, 4, 5, false],
+    [4, 3, 5, 4, s === 3],
+    [3 - (s % 2), 4, 3 + (s % 2), 3 - (s % 3 === 0 ? 1 : 0), s % 3 === 0],
+  ]);
+  const now = Date.now();
+  for (let s = 0; s < picks.length; s++) {
+    const participantId = `sample-student-${s + 1}`;
+    const completed = s < 6;
+    const consentedAt = new Date(now - (60 - s * 5) * 60_000);
+    await Participant.create({ quizId, participantId, consentedAt, completedAt: completed ? new Date(consentedAt.getTime() + 9 * 60_000) : null, userAgent: "seed" });
+    const answered = completed ? 4 : 2 + (s % 2);
+    await QuestionResponse.insertMany(
+      surveyQs.slice(0, answered).map((questionId, i) => {
+        const [clarity, difficulty, usefulness, perceivedAccuracy, flaggedError] = ratings[s][i];
+        const at = new Date(consentedAt.getTime() + (i + 1) * 2 * 60_000);
+        return {
+          quizId, questionId, participantId,
+          selectedIndex: picks[s][i], isCorrect: picks[s][i] === correct[i], answeredAt: at,
+          clarity, difficulty, usefulness, perceivedAccuracy, flaggedError, ratedAt: at,
+        };
+      }),
+    );
+    if (completed) {
+      const texts = [
+        ["The explanations quoted the notes directly.", ""],
+        ["Short and to the point.", "Question 4 was worded confusingly."],
+        ["Good mix of easy and hard.", ""],
+        ["", "Some options were obviously wrong."],
+        ["Felt like real exam questions.", "The last one could have two answers."],
+        ["Instant feedback helped.", ""],
+      ][s];
+      await SurveyResponse.create({
+        quizId, participantId,
+        wouldUse: [5, 4, 4, 3, 5, 4][s],
+        comparedToInstructor: (["about the same", "worse", "better", "about the same", "better", "about the same"] as const)[s],
+        examHelp: [4, 3, 4, 3, 5, 4][s],
+        helpfulText: texts[0], unhelpfulText: texts[1],
+      });
+    }
+  }
 }
 
 main()
