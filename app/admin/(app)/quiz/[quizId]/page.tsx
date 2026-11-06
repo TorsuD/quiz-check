@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { LoadingCard, PageHeader } from "@/components/admin-ui";
+import { ArrowLeftIcon, ChartIcon, DownloadIcon, QrIcon, ShieldIcon } from "@/components/icons";
 import { loadQuizBundle } from "@/lib/quiz";
 import { Participant, QuestionResponse, SurveyResponse } from "@/lib/models";
 import { quizUrlAndQr } from "@/lib/url";
@@ -8,19 +10,9 @@ import { CopyLink, OpenToggle } from "./QuizControls";
 
 export default function QuizAdminPage({ params }: PageProps<"/admin/quiz/[quizId]">) {
   return (
-    <Suspense fallback={<p className="text-stone-500">Loading…</p>}>
+    <Suspense fallback={<LoadingCard />}>
       <QuizAdmin params={params} />
     </Suspense>
-  );
-}
-
-function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
-  return (
-    <div className="card">
-      <p className="text-sm text-stone-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
-      {hint && <p className="mt-1 text-xs text-stone-500">{hint}</p>}
-    </div>
   );
 }
 
@@ -38,70 +30,96 @@ async function QuizAdmin({ params }: { params: Promise<{ quizId: string }> }) {
     SurveyResponse.countDocuments({ quizId }),
     quizUrlAndQr(quizId),
   ]);
+  const rate = started ? Math.round((completed / started) * 100) : 0;
 
   return (
     <div>
-      <Link href={`/admin/lectures/${quiz.lectureId}`} className="text-sm text-stone-500 hover:underline">
-        ← Question set
-      </Link>
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{quiz.title}</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {questions.length} questions · published {new Date(quiz.publishedAt).toLocaleString()}
-          </p>
-        </div>
-        <OpenToggle quizId={quizId} isOpen={quiz.isOpen} />
-      </div>
+      <PageHeader
+        eyebrow={
+          <Link href={`/admin/lectures/${quiz.lectureId}`} className="inline-flex items-center gap-1.5 text-stone-500 hover:text-brand-700">
+            <ArrowLeftIcon /> Question set
+          </Link>
+        }
+        title={quiz.title}
+        subtitle={
+          <span className="inline-flex flex-wrap items-center gap-x-2">
+            <span className="inline-flex items-center gap-1.5 font-medium text-stone-700">
+              <span className={`h-2 w-2 rounded-full ${quiz.isOpen ? "animate-pulse bg-emerald-500" : "bg-stone-400"}`} />
+              {quiz.isOpen ? "Open" : "Closed"}
+            </span>
+            <span>· {questions.length} questions</span>
+            <span>· published {new Date(quiz.publishedAt).toLocaleDateString()}</span>
+          </span>
+        }
+        actions={<OpenToggle quizId={quizId} isOpen={quiz.isOpen} />}
+      />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Started" value={started} hint="Agreed to consent" />
-            <Stat label="Completed" value={completed} hint="Submitted final survey" />
-            <Stat label="Completion rate" value={started ? `${Math.round((completed / started) * 100)}%` : "–"} />
-          </div>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="space-y-8">
+          {/* Responses at a glance */}
+          <section>
+            <dl className="grid grid-cols-3 divide-x-2 divide-line rounded-md border-2 border-line bg-surface">
+              <Stat label="Started" value={started} />
+              <Stat label="Completed" value={completed} />
+              <Stat label="Completion" value={started ? `${rate}%` : "–"} />
+            </dl>
+          </section>
 
-          <div className="card">
-            <h2 className="font-semibold">Export data</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              {responses} question responses · {surveys} final surveys. Partial responses are included.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <a href={`/api/admin/quizzes/${quizId}/export/responses`} className="btn-secondary">
-                Download responses CSV
+          {/* Next steps */}
+          <nav className="flex flex-wrap gap-2" aria-label="Analysis">
+            <Link href={`/admin/review/${quizId}`} className="btn-secondary">
+              <ShieldIcon /> Expert review
+            </Link>
+            <Link href={`/admin/results/${quizId}`} className="btn-secondary">
+              <ChartIcon /> Results
+            </Link>
+          </nav>
+
+          <section id="export" className="scroll-mt-20">
+            <h2 className="label">Export</h2>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <a href={`/api/admin/quizzes/${quizId}/export/responses`} className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-brand-700">
+                <DownloadIcon /> Responses CSV <span className="font-normal text-stone-500">({responses})</span>
               </a>
-              <a href={`/api/admin/quizzes/${quizId}/export/survey`} className="btn-secondary">
-                Download survey CSV
+              <a href={`/api/admin/quizzes/${quizId}/export/survey`} className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-brand-700">
+                <DownloadIcon /> Survey CSV <span className="font-normal text-stone-500">({surveys})</span>
               </a>
             </div>
-            <p className="mt-3 text-xs text-stone-500">
-              Responses CSV: one row per participant per question (blank if not answered). Survey CSV: one row per
-              participant who submitted the final survey.
-            </p>
-          </div>
+          </section>
 
-          <div className="card">
-            <h2 className="font-semibold">Questions in this survey</h2>
-            <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-stone-700">
+          <details className="group">
+            <summary className="label cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              Questions ({questions.length}) <span className="inline-block transition group-open:rotate-90">›</span>
+            </summary>
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-stone-700 marker:text-stone-400">
               {questions.map((q) => (
                 <li key={String(q._id)}>{q.question}</li>
               ))}
             </ol>
-          </div>
+          </details>
         </div>
 
-        <aside className="card h-fit text-center">
-          <h2 className="font-semibold">Student link</h2>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qr} alt={`QR code for ${url}`} className="mx-auto mt-3 w-full max-w-64" />
+        <aside className="h-fit text-center">
+          <div className="rounded-md border-2 border-line bg-white p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qr} alt={`QR code for ${url}`} className="mx-auto w-full max-w-56" />
+          </div>
           <CopyLink url={url} />
-          <Link href={`/admin/present/${quizId}`} target="_blank" className="btn-primary mt-3 w-full">
-            Open full-screen QR for slides
+          <Link href={`/admin/present/${quizId}`} target="_blank" className="btn-primary mt-2 w-full">
+            <QrIcon /> Present QR
           </Link>
-          {!quiz.isOpen && <p className="mt-3 text-xs text-amber-700">The survey is closed: new students cannot start.</p>}
+          {!quiz.isOpen && <p className="mt-3 text-xs text-stone-500">Closed: new students can&apos;t start.</p>}
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="px-4 py-3">
+      <dt className="text-[11px] font-semibold tracking-wider text-stone-500 uppercase">{label}</dt>
+      <dd className="mt-0.5 font-display text-2xl text-ink tabular-nums">{value}</dd>
     </div>
   );
 }
