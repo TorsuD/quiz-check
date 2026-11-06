@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckIcon, ClockIcon, FlagIcon, LockIcon, LogoMark, SaveIcon, ShieldIcon, XIcon } from "@/components/icons";
 import { CONSENT_TEXT, LETTERS, RATING_SCALES, SURVEY, type RatingKey } from "@/lib/constants";
 
 export type PublicQuestion = { id: string; question: string; options: string[] };
@@ -75,12 +76,21 @@ export default function QuizFlow({
   const goAfter = (index: number) =>
     setStep(index + 1 < questions.length ? { kind: "question", index: index + 1 } : { kind: "survey" });
 
+  const correctSoFar = Object.values(answers).filter((a) => a.isCorrect).length;
+
   return (
     <div className="flex flex-1 flex-col">
       <header className="mb-5">
-        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">Practice question survey</p>
-        <h1 className="mt-0.5 text-lg leading-snug font-semibold text-stone-900">{title}</h1>
-        {step.kind === "question" && <ProgressBar current={step.index + 1} total={questions.length} />}
+        <div className="flex items-center gap-3">
+          <LogoMark className="h-9 w-9 text-lg" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold tracking-wide text-brand-600 uppercase">Practice question survey</p>
+            <h1 className="truncate font-sans text-base leading-snug font-semibold text-stone-900">{title}</h1>
+          </div>
+        </div>
+        {step.kind === "question" && (
+          <ProgressBar current={step.index + 1} total={questions.length} correct={correctSoFar} />
+        )}
         {step.kind === "survey" && <ProgressBar current={questions.length} total={questions.length} label="Final questions" />}
       </header>
 
@@ -88,19 +98,25 @@ export default function QuizFlow({
         <Consent
           quizId={quizId}
           count={questions.length}
-          onStarted={(completed) => setStep(completed ? { kind: "done", returning: true } : resumeStep(questions, { ...initial, started: true }, true))}
+          onStarted={(completed) =>
+            setStep(completed ? { kind: "done", returning: true } : resumeStep(questions, { ...initial, started: true }, true))
+          }
         />
       )}
       {step.kind === "closed" && (
-        <div className="card text-center">
-          <h2 className="text-lg font-semibold">This survey is closed</h2>
-          <p className="mt-2 text-stone-600">It is not accepting new responses right now.</p>
+        <div className="card py-10 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 text-xl text-stone-500">
+            <LockIcon />
+          </span>
+          <h2 className="mt-4 text-lg font-semibold">This survey is closed</h2>
+          <p className="mt-1.5 text-stone-600">It is not accepting new responses right now.</p>
         </div>
       )}
       {step.kind === "question" && (
         <QuestionStep
           key={questions[step.index].id}
           quizId={quizId}
+          number={step.index + 1}
           question={questions[step.index]}
           answer={answers[questions[step.index].id]}
           onAnswered={(a) => setAnswers((prev) => ({ ...prev, [questions[step.index].id]: a }))}
@@ -114,20 +130,29 @@ export default function QuizFlow({
       )}
       {step.kind === "survey" && <SurveyStep quizId={quizId} onDone={() => setStep({ kind: "done", returning: false })} />}
       {step.kind === "done" && <Done returning={step.returning} />}
+
+      <p className="mt-auto pt-8 text-center text-xs text-stone-400">Anonymous · COMP-5112 research project</p>
     </div>
   );
 }
 
-function ProgressBar({ current, total, label }: { current: number; total: number; label?: string }) {
+function ProgressBar({ current, total, label, correct }: { current: number; total: number; label?: string; correct?: number }) {
   const pct = total ? Math.round((current / total) * 100) : 0;
   return (
-    <div className="mt-3">
-      <div className="mb-1 flex justify-between text-xs text-stone-500">
-        <span>{label ?? `Question ${current} of ${total}`}</span>
-        <span>{label ? "" : `${pct}%`}</span>
+    <div className="mt-4">
+      <div className="mb-1.5 flex items-baseline justify-between text-xs">
+        <span className="font-medium text-stone-700">{label ?? `Question ${current} of ${total}`}</span>
+        {correct !== undefined && correct > 0 && (
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+            <CheckIcon /> {correct} correct
+          </span>
+        )}
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
-        <div className="h-full rounded-full bg-stone-800 transition-all" style={{ width: `${pct}%` }} />
+      <div className="h-2 w-full overflow-hidden rounded-full bg-stone-200/70">
+        <div
+          className="h-full rounded-full stripes bg-brand-600 transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -136,7 +161,7 @@ function ProgressBar({ current, total, label }: { current: number; total: number
 function ErrorNote({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+    <p role="alert" className="mt-3 rounded-md border-2 border-line bg-rose-100 px-3.5 py-2.5 text-sm text-rose-800">
       {message}
     </p>
   );
@@ -158,19 +183,36 @@ function Consent({ quizId, count, onStarted }: { quizId: string; count: number; 
     }
   }
 
+  const facts = [
+    { icon: <ClockIcon />, text: `${count} multiple-choice questions, then a short survey (about 10 minutes).` },
+    { icon: <CheckIcon />, text: "After each answer you see the explanation, then rate the question." },
+    { icon: <SaveIcon />, text: "Your progress is saved as you go." },
+  ];
+
   return (
-    <section className="card">
-      <h2 className="text-base font-semibold">Before you start</h2>
-      <p className="mt-3 text-[15px] leading-relaxed text-stone-700">{CONSENT_TEXT}</p>
-      <ul className="mt-4 space-y-1.5 text-sm text-stone-600">
-        <li>• {count} multiple-choice questions, then a short survey (about 10 minutes).</li>
-        <li>• After each answer you will see the explanation and rate the question.</li>
-        <li>• Your progress is saved as you go.</li>
-      </ul>
-      <button onClick={start} disabled={busy} className="btn-primary mt-6 min-h-12 w-full text-base">
-        {busy ? "Starting…" : "I agree, start"}
-      </button>
-      <ErrorNote message={error} />
+    <section className="card overflow-hidden p-0 sm:p-0">
+      <div className="border-b-2 border-line bg-brand-600 px-5 py-6 text-white sm:px-6">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
+          <ShieldIcon />
+        </span>
+        <h2 className="mt-3 text-xl font-semibold">Before you start</h2>
+        <p className="mt-1 text-sm text-white/80">Help us find out whether AI-written practice questions are any good.</p>
+      </div>
+      <div className="px-5 py-5 sm:px-6">
+        <p className="rounded-md border-2 border-dashed border-stone-400 bg-paper/60 p-4 text-[15px] leading-relaxed text-stone-800">{CONSENT_TEXT}</p>
+        <ul className="mt-5 space-y-3">
+          {facts.map((f) => (
+            <li key={f.text} className="flex items-start gap-3 text-sm text-stone-600">
+              <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">{f.icon}</span>
+              {f.text}
+            </li>
+          ))}
+        </ul>
+        <button onClick={start} disabled={busy} className="btn-primary mt-6 min-h-12 w-full text-base">
+          {busy ? "Starting…" : "I agree, start"}
+        </button>
+        <ErrorNote message={error} />
+      </div>
     </section>
   );
 }
@@ -180,6 +222,7 @@ const EMPTY_RATINGS: Ratings = { clarity: null, difficulty: null, usefulness: nu
 
 function QuestionStep({
   quizId,
+  number,
   question,
   answer,
   onAnswered,
@@ -187,6 +230,7 @@ function QuestionStep({
   isLast,
 }: {
   quizId: string;
+  number: number;
   question: PublicQuestion;
   answer: Answer | undefined;
   onAnswered: (a: Answer) => void;
@@ -217,7 +261,8 @@ function QuestionStep({
     }
   }
 
-  const allRated = RATING_SCALES.every((s) => ratings[s.key] !== null);
+  const ratedCount = RATING_SCALES.filter((s) => ratings[s.key] !== null).length;
+  const allRated = ratedCount === RATING_SCALES.length;
 
   async function submitRatings() {
     if (!allRated) return;
@@ -237,34 +282,44 @@ function QuestionStep({
   return (
     <div className="space-y-4">
       <section className="card">
-        <h2 className="text-[17px] leading-relaxed font-medium text-stone-900">{question.question}</h2>
-        <div className="mt-4 space-y-2.5" role="radiogroup" aria-label="Answer options">
+        <p className="text-xs font-semibold tracking-wide text-brand-600 uppercase">Question {number}</p>
+        <h2 className="mt-1.5 font-sans text-[17px] leading-relaxed font-semibold tracking-normal text-stone-900">{question.question}</h2>
+        <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Answer options">
           {question.options.map((opt, i) => {
-            let tone = "border-stone-300 bg-white hover:border-stone-400";
-            if (!answered && selected === i) tone = "border-stone-900 bg-stone-50 ring-2 ring-stone-900";
+            const isSelected = selected === i;
+            const isCorrectOpt = answered && i === answer!.correctIndex;
+            const isWrongPick = answered && i === answer!.selectedIndex && !answer!.isCorrect;
+
+            let row = "border-line bg-field hover:bg-yellow-50";
+            let badge = "bg-stone-100 text-stone-600";
+            if (!answered && isSelected) {
+              row = "border-line bg-brand-50 shadow-sm";
+              badge = "bg-brand-600 text-white";
+            }
             if (answered) {
-              if (i === answer!.correctIndex) tone = "border-emerald-600 bg-emerald-50";
-              else if (i === answer!.selectedIndex) tone = "border-red-500 bg-red-50";
-              else tone = "border-stone-200 bg-white opacity-70";
+              row = "border-stone-300 bg-field opacity-60";
+              if (isCorrectOpt) {
+                row = "border-line bg-emerald-100 shadow-sm";
+                badge = "bg-emerald-600 text-white";
+              } else if (isWrongPick) {
+                row = "border-line bg-rose-100";
+                badge = "bg-rose-500 text-white";
+              }
             }
             return (
               <button
                 key={i}
                 type="button"
                 role="radio"
-                aria-checked={selected === i}
+                aria-checked={isSelected}
                 disabled={answered || busy}
                 onClick={() => setSelected(i)}
-                className={`flex min-h-14 w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left text-[15px] leading-snug transition-colors ${tone}`}
+                className={`flex min-h-14 w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-[15px] leading-snug text-stone-800 transition ${row}`}
               >
-                <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current text-xs font-semibold">
-                  {LETTERS[i]}
+                <span className={`mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${badge}`}>
+                  {isCorrectOpt ? <CheckIcon strokeWidth={3} /> : isWrongPick ? <XIcon strokeWidth={3} /> : LETTERS[i]}
                 </span>
-                <span className="min-w-0 flex-1 break-words">{opt}</span>
-                {answered && i === answer!.correctIndex && <span className="shrink-0 text-sm font-medium text-emerald-700">Correct</span>}
-                {answered && i === answer!.selectedIndex && !answer!.isCorrect && (
-                  <span className="shrink-0 text-sm font-medium text-red-700">Your answer</span>
-                )}
+                <span className="min-w-0 flex-1 pt-0.5 break-words">{opt}</span>
               </button>
             );
           })}
@@ -276,13 +331,24 @@ function QuestionStep({
         )}
         {answered && (
           <div
-            className={`mt-5 rounded-lg px-4 py-3 ${answer!.isCorrect ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+            className={`mt-5 flex gap-3 rounded-xl p-4 ${
+              answer!.isCorrect ? "border-2 border-line bg-emerald-100 text-emerald-950" : "border-2 border-line bg-yellow-100 text-amber-950"
+            }`}
             aria-live="polite"
           >
-            <p className="font-semibold">
-              {answer!.isCorrect ? "Correct!" : `Not quite. The answer is ${LETTERS[answer!.correctIndex]}.`}
-            </p>
-            <p className="mt-1 text-[15px] leading-relaxed">{answer!.explanation}</p>
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${
+                answer!.isCorrect ? "bg-emerald-600" : "bg-amber-500"
+              }`}
+            >
+              {answer!.isCorrect ? <CheckIcon strokeWidth={3} /> : <XIcon strokeWidth={3} />}
+            </span>
+            <div>
+              <p className="font-semibold">
+                {answer!.isCorrect ? "Correct!" : `Not quite. The answer is ${LETTERS[answer!.correctIndex]}.`}
+              </p>
+              <p className="mt-1 text-[15px] leading-relaxed opacity-90">{answer!.explanation}</p>
+            </div>
           </div>
         )}
         {!answered && <ErrorNote message={error} />}
@@ -290,9 +356,16 @@ function QuestionStep({
 
       {answered && (
         <section className="card">
-          <h3 className="text-base font-semibold">Rate this question</h3>
-          <p className="mt-0.5 text-sm text-stone-500">Rate the question itself, not how you did.</p>
-          <div className="mt-4 space-y-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Rate this question</h3>
+              <p className="mt-0.5 text-sm text-stone-500">Rate the question itself, not how you did.</p>
+            </div>
+            <span className="pill shrink-0 bg-brand-50 text-brand-700">
+              {ratedCount}/{RATING_SCALES.length}
+            </span>
+          </div>
+          <div className="mt-5 space-y-6">
             {RATING_SCALES.map((scale) => (
               <ScaleInput
                 key={scale.key}
@@ -303,14 +376,19 @@ function QuestionStep({
                 onChange={(v) => setRatings((r) => ({ ...r, [scale.key]: v }))}
               />
             ))}
-            <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-stone-300 px-3.5 py-3">
+            <label
+              className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 transition ${
+                flagged ? "border-line bg-yellow-100 text-amber-950" : "border-stone-300 hover:border-line hover:bg-yellow-50"
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={flagged}
                 onChange={(e) => setFlagged(e.target.checked)}
-                className="h-5 w-5 shrink-0 accent-stone-900"
+                className="h-5 w-5 shrink-0 accent-amber-500"
               />
-              <span className="text-[15px]">I think this question has an error</span>
+              <span className="flex-1 text-[15px]">I think this question has an error</span>
+              <FlagIcon className={flagged ? "text-amber-500" : "text-stone-300"} />
             </label>
           </div>
           <button onClick={submitRatings} disabled={!allRated || busy} className="btn-primary mt-6 min-h-12 w-full text-base">
@@ -339,7 +417,7 @@ function ScaleInput({
 }) {
   return (
     <fieldset>
-      <legend className="mb-2 text-[15px] font-medium text-stone-800">{label}</legend>
+      <legend className="mb-2.5 text-[15px] font-medium text-stone-800">{label}</legend>
       <div className="grid grid-cols-5 gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -348,8 +426,10 @@ function ScaleInput({
             aria-pressed={value === n}
             aria-label={`${label}: ${n}${n === 1 ? ` (${low})` : n === 5 ? ` (${high})` : ""}`}
             onClick={() => onChange(n)}
-            className={`min-h-12 rounded-lg border text-base font-medium transition-colors ${
-              value === n ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white text-stone-800 hover:bg-stone-50"
+            className={`min-h-12 rounded-xl border text-base font-semibold transition ${
+              value === n
+                ? "border-line bg-brand-600 text-white shadow-xs"
+                : "border-line bg-field text-stone-800 hover:bg-yellow-50"
             }`}
           >
             {n}
@@ -361,6 +441,17 @@ function ScaleInput({
         <span className="text-right">5 = {high}</span>
       </div>
     </fieldset>
+  );
+}
+
+function SurveySection({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
 
@@ -397,50 +488,59 @@ function SurveyStep({ quizId, onDone }: { quizId: string; onDone: () => void }) 
   return (
     <section className="card space-y-7">
       <div>
-        <h2 className="text-base font-semibold">Almost done: a few questions about the whole set</h2>
-        <p className="mt-0.5 text-sm text-stone-500">Please don&apos;t include your name or student ID.</p>
+        <h2 className="text-lg font-semibold">Almost done</h2>
+        <p className="mt-0.5 text-sm text-stone-500">A few questions about the whole set. Please don&apos;t include your name or student ID.</p>
       </div>
-      <ScaleInput label={SURVEY.wouldUse} low="Definitely not" high="Definitely yes" value={wouldUse} onChange={setWouldUse} />
+      <SurveySection n={1}>
+        <ScaleInput label={SURVEY.wouldUse} low="Definitely not" high="Definitely yes" value={wouldUse} onChange={setWouldUse} />
+      </SurveySection>
 
-      <fieldset>
-        <legend className="mb-2 text-[15px] font-medium text-stone-800">{SURVEY.comparedToInstructor}</legend>
-        <div className="space-y-2">
-          {COMPARISON.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              aria-pressed={compared === opt}
-              onClick={() => setCompared(opt)}
-              className={`min-h-12 w-full rounded-lg border px-4 text-left text-[15px] capitalize transition-colors ${
-                compared === opt ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white text-stone-800 hover:bg-stone-50"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <SurveySection n={2}>
+        <fieldset>
+          <legend className="mb-2.5 text-[15px] font-medium text-stone-800">{SURVEY.comparedToInstructor}</legend>
+          <div className="space-y-2">
+            {COMPARISON.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                aria-pressed={compared === opt}
+                onClick={() => setCompared(opt)}
+                className={`flex min-h-12 w-full items-center justify-between rounded-xl border px-4 text-left text-[15px] capitalize transition ${
+                  compared === opt
+                    ? "border-line bg-brand-600 font-medium text-white shadow-xs"
+                    : "border-line bg-field text-stone-800 hover:bg-yellow-50"
+                }`}
+              >
+                {opt}
+                {compared === opt && <CheckIcon strokeWidth={3} />}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      </SurveySection>
 
-      <ScaleInput label={SURVEY.examHelp} low="Not at all" high="A great deal" value={examHelp} onChange={setExamHelp} />
+      <SurveySection n={3}>
+        <ScaleInput label={SURVEY.examHelp} low="Not at all" high="A great deal" value={examHelp} onChange={setExamHelp} />
+      </SurveySection>
 
-      <div>
-        <label htmlFor="helpful" className="mb-2 block text-[15px] font-medium text-stone-800">
-          {SURVEY.helpfulText} <span className="font-normal text-stone-500">(optional)</span>
+      <SurveySection n={4}>
+        <label htmlFor="helpful" className="mb-2.5 block text-[15px] font-medium text-stone-800">
+          {SURVEY.helpfulText} <span className="font-normal text-stone-400">(optional)</span>
         </label>
         <textarea id="helpful" rows={3} maxLength={3000} value={helpfulText} onChange={(e) => setHelpfulText(e.target.value)} className="input" />
-      </div>
-      <div>
-        <label htmlFor="unhelpful" className="mb-2 block text-[15px] font-medium text-stone-800">
-          {SURVEY.unhelpfulText} <span className="font-normal text-stone-500">(optional)</span>
+      </SurveySection>
+      <SurveySection n={5}>
+        <label htmlFor="unhelpful" className="mb-2.5 block text-[15px] font-medium text-stone-800">
+          {SURVEY.unhelpfulText} <span className="font-normal text-stone-400">(optional)</span>
         </label>
         <textarea id="unhelpful" rows={3} maxLength={3000} value={unhelpfulText} onChange={(e) => setUnhelpfulText(e.target.value)} className="input" />
-      </div>
+      </SurveySection>
 
       <div>
         <button onClick={submit} disabled={!ready || busy} className="btn-primary min-h-12 w-full text-base">
           {busy ? "Submitting…" : "Submit"}
         </button>
-        {!ready && <p className="mt-2 text-center text-xs text-stone-500">The first three questions are required.</p>}
+        {!ready && <p className="mt-2 text-center text-xs text-stone-500">Questions 1–3 are required.</p>}
         <ErrorNote message={error} />
       </div>
     </section>
@@ -449,11 +549,14 @@ function SurveyStep({ quizId, onDone }: { quizId: string; onDone: () => void }) 
 
 function Done({ returning }: { returning: boolean }) {
   return (
-    <section className="card py-10 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700" aria-hidden>
-        ✓
+    <section className="card py-12 text-center">
+      <div className="relative mx-auto h-16 w-16">
+        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-200 opacity-40 [animation-iteration-count:2]" />
+        <span className="relative flex h-16 w-16 items-center justify-center rounded-md border-2 border-line bg-emerald-500 text-3xl text-white shadow-md">
+          <CheckIcon strokeWidth={3} />
+        </span>
       </div>
-      <h2 className="mt-4 text-xl font-semibold">Thank you!</h2>
+      <h2 className="mt-5 text-2xl font-semibold">Thank you!</h2>
       <p className="mx-auto mt-2 max-w-sm text-stone-600">
         {returning
           ? "You have already completed this survey on this device. Your responses were saved."
