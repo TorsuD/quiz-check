@@ -68,42 +68,62 @@ export async function POST(request: Request) {
     return fail(`The notes are too long (${text.length.toLocaleString()} characters; limit ${MAX_TEXT_CHARS.toLocaleString()}). Split the lecture into parts.`);
   }
 
-  let output: GenerationOutput;
   if (mode === "import") {
     // Same fence stripping and zod validation as LLM output, but no retry: the error goes back to the admin.
     const parsed = parseGeneration(importJson);
     if (!parsed.ok) return fail(`Could not import: ${parsed.problem}`);
-    output = { questions: parsed.questions, provider: "import", model: importModel, attempts: 0 };
-  } else {
-    try {
-      output = await generateQuestions(title, text, count);
-    } catch (err) {
-      console.error("Generation failed", err);
-      if (err instanceof GenerationError) return fail(err.message, 502);
-      const message = err instanceof Error ? err.message : "Unknown error";
-      return fail(`The LLM request failed: ${message}`, 502);
-    }
+    const output: GenerationOutput = { questions: parsed.questions, provider: "import", model: importModel, attempts: 0 };
+    return Response.json(await save(output, { title, sourceType, fileName, text }));
   }
 
+  // LLM mode streams newline-delimited JSON events so the page can show a live progress bar:
+  //   {type:"progress", started, total, attempt}  then  {type:"saving"}  then  {type:"done", ...} or {type:"error", error}
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: GenerateEvent) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      try {
+        send({ type: "progress", started: 0, total: count, attempt: 1 });
+        const output = await generateQuestions(title, text, count, (p) => send({ type: "progress", total: count, ...p }));
+        send({ type: "saving" });
+        send({ type: "done", ...(await save(output, { title, sourceType, fileName, text })) });
+      } catch (err) {
+        console.error("Generation failed", err);
+        const message = err instanceof Error ? err.message : "Unknown error";
+        send({ type: "error", error: err instanceof GenerationError ? message : `The LLM request failed: ${message}` });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(body, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
+  });
+}
+
+export type GenerateEvent =
+  | { type: "progress"; started: number; total: number; attempt: number }
+  | { type: "saving" }
+  | { type: "done"; lectureId: string; count: number; attempts: number; model: string }
+  | { type: "error"; error: string };
+
+async function save(
+  output: GenerationOutput,
+  source: { title: string; sourceType: "pdf" | "text"; fileName: string | null; text: string },
+) {
   await connectDB();
   const generatedAt = new Date();
-  const lecture = await Lecture.create({ title, sourceType, fileName, text });
+  const lecture = await Lecture.create(source);
   await Question.insertMany(
     output.questions.map((q, i) => ({
       lectureId: lecture._id,
       order: i + 1,
       ...q,
-      excerptFoundInText: excerptAppearsIn(q.sourceExcerpt, text),
+      excerptFoundInText: excerptAppearsIn(q.sourceExcerpt, source.text),
       model: output.model,
       provider: output.provider,
       generatedAt,
     })),
   );
-
-  return Response.json({
-    lectureId: String(lecture._id),
-    count: output.questions.length,
-    attempts: output.attempts,
-    model: output.model,
-  });
+  return { lectureId: String(lecture._id), count: output.questions.length, attempts: output.attempts, model: output.model };
 }
