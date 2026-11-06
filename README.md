@@ -4,7 +4,7 @@ Research tool for the project **"Accuracy and Usefulness of AI-Generated Practic
 
 Researchers upload lecture notes, an LLM generates multiple-choice practice questions, the researchers review and remove bad ones, and students take the quiz on their phones in class and rate every question. All responses can be exported as CSV.
 
-**Status:** Phase 1 (generation, review, publishing, the student survey, CSV export) is done. Phase 2 (expert review mode and results dashboard) is planned.
+**Status:** Phase 1 (generation, review, publishing, the student survey, CSV export) and Phase 2 (expert review and results dashboard) are done.
 
 ## Stack
 
@@ -40,7 +40,9 @@ Open `http://localhost:3000/admin` and sign in with `ADMIN_PASSWORD`.
 npm run seed
 ```
 
-The seed script inserts a sample lecture ("[Sample] Database Normalization") with 5 questions. One of them is pre-removed with a reason, so you can see how soft-deleted questions look. It also publishes an **open** quiz and prints the student and admin URLs. Running it again replaces the previous sample data, including its responses. Nothing else is touched.
+The seed script inserts a sample lecture ("[Sample] Database Normalization") with 5 questions. One of them is pre-removed with a reason, so you can see how soft-deleted questions look. It also publishes an **open** quiz and prints the student, admin and results URLs. Running it again replaces the previous sample data, including its responses. Nothing else is touched.
+
+`npm run seed -- --with-results` also adds sample expert reviews (with one deliberate disagreement), 8 student attempts and 6 final surveys, so the results dashboard has something to show. Don't use this flag on a database you're collecting real data in: the sample responses sit on the sample quiz only, but they are fake.
 
 The script reads `.env.local` (or `.env`) for `MONGODB_URI`.
 
@@ -63,6 +65,36 @@ The script reads `.env.local` (or `.env`) for `MONGODB_URI`.
 - Every answer and rating is saved right away.
 - A final survey and a thank-you screen.
 
+## Phase 2: measuring accuracy and usefulness
+
+**Accuracy** is judged by two experts; **usefulness** by the students.
+
+### Expert review (`/admin/review/[quizId]`)
+
+Open it from the survey page ("Expert review"). Each reviewer picks their name, then scores **every generated question, including ones removed before the survey**, so the researcher's filtering does not inflate the AI's accuracy. Per question:
+
+- Factually correct? yes / partially / no
+- Is the marked answer correct? yes / no
+- Relevance to the lecture, 1–5
+- Clarity of wording, 1–5
+- Problems: hallucination, wrong answer key, ambiguous wording, multiple correct options, too trivial, off-topic, other (other needs a note)
+
+Reviewers only see their own scores on this page, to keep the two reviews independent. (There is one admin password, so this relies on reviewers not peeking.)
+
+Reviewer names are in `config/reviewers.ts`. Change `name` freely; don't change `id` once reviews are saved.
+
+### Results dashboard (`/admin/results/[quizId]`)
+
+| Section | What it reports |
+|---|---|
+| Accuracy | Accuracy rate: questions **both** reviewers call accurate (factually correct **and** right answer key), plus a lenient rate (either reviewer). Verdicts per reviewer, error-tag counts, unverifiable excerpts, removals. |
+| Reviewer agreement | Percent agreement and Cohen's κ (with Landis & Koch labels) for the overall verdict, each judgment and the ratings; ±1 agreement for 1–5 scales; a list of questions the reviewers disagree on. |
+| Students | % correct, mean clarity / difficulty / usefulness / perceived accuracy, error-flag rate, per question and overall. |
+| Final survey | Distributions for "would use", "exam help" and "compared to instructor", plus the open-text answers. |
+| Students vs experts | Student reactions to expert-accurate vs not-accurate questions, Spearman ρ between expert and student judgments, and a scatter plot. |
+
+"Full CSV" exports one row per generated question with both reviewers' scores side by side, agreement and student aggregates, for SPSS, R or Excel. The calculations live in `lib/results.ts` and `lib/stats.ts`.
+
 ## Data model (`lib/models.ts`)
 
 All collections have `createdAt` / `updatedAt`.
@@ -75,7 +107,7 @@ All collections have `createdAt` / `updatedAt`.
 | Participant | quizId, participantId (anonymous UUID), consentedAt, completedAt, userAgent |
 | QuestionResponse | quizId, questionId, participantId, selectedIndex, isCorrect, clarity, difficulty, usefulness, perceivedAccuracy, flaggedError, answeredAt, ratedAt |
 | SurveyResponse | quizId, participantId, wouldUse, comparedToInstructor, examHelp, helpfulText, unhelpfulText |
-| ExpertReview | quizId, questionId, reviewer, factuallyCorrect, answerKeyCorrect, relevance, clarity, errorTags, otherNote (Phase 2) |
+| ExpertReview | quizId, questionId, reviewer, factuallyCorrect, answerKeyCorrect, relevance, clarity, errorTags, otherNote; one per question per reviewer |
 
 Unique indexes stop duplicate participants, duplicate responses per question, and duplicate surveys.
 
@@ -115,4 +147,4 @@ Notes:
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript check |
-| `npm run seed` | Insert sample data |
+| `npm run seed` | Insert sample data (`-- --with-results` adds sample reviews and responses) |
