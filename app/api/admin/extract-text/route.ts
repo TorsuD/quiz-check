@@ -1,5 +1,4 @@
 import { isAdmin, unauthorizedResponse } from "@/lib/admin";
-import { extractPdfText } from "@/lib/pdf";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
@@ -24,7 +23,7 @@ export async function POST(request: Request) {
   if (file.size > MAX_PDF_BYTES) return fail("PDF is larger than 10 MB.");
   if (file.type && file.type !== "application/pdf") return fail("Only PDF files are supported.");
   try {
-    const text = await extractPdfText(new Uint8Array(await file.arrayBuffer()));
+    const text = await (await import("@/lib/pdf")).extractPdfText(new Uint8Array(await file.arrayBuffer()));
     return Response.json({ text }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("PDF extraction failed", err);

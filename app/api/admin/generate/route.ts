@@ -2,7 +2,6 @@ import { isAdmin, unauthorizedResponse } from "@/lib/admin";
 import { connectDB } from "@/lib/db";
 import { GenerationError, excerptAppearsIn, generateQuestions, parseGeneration, type GenerationOutput } from "@/lib/generate";
 import { Lecture, Question } from "@/lib/models";
-import { extractPdfText } from "@/lib/pdf";
 
 // Generation with a large model can take a minute or more.
 export const maxDuration = 300;
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
     if (file.size > MAX_PDF_BYTES) return fail("PDF is larger than 10 MB.");
     if (file.type && file.type !== "application/pdf") return fail("Only PDF files are supported.");
     try {
-      text = await extractPdfText(new Uint8Array(await file.arrayBuffer()));
+      text = await (await import("@/lib/pdf")).extractPdfText(new Uint8Array(await file.arrayBuffer()));
     } catch (err) {
       console.error("PDF extraction failed", err);
       return fail("Could not read text from that PDF. If it is a scanned image, paste the text instead.");
