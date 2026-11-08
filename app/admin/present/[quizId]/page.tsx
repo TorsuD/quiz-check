@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Scan to join", robots: { index: fals
 // Full-screen QR code for projecting during class.
 export default function PresentPage({ params }: PageProps<"/admin/present/[quizId]">) {
   return (
-    <main className="flex flex-1 items-center justify-center bg-brand-600 bg-[radial-gradient(rgb(255_255_255/0.18)_1.5px,transparent_1.5px)] bg-size-[22px_22px] px-6 py-10">
+    <main className="flex flex-1 items-center justify-center bg-brand-600 bg-[linear-gradient(to_right,rgb(255_255_255/0.07)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.07)_1px,transparent_1px)] bg-size-[48px_48px] px-6 py-10">
       <Suspense fallback={null}>
         <Present params={params} />
       </Suspense>

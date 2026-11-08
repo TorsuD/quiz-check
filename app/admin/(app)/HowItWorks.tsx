@@ -114,12 +114,12 @@ function Tracker({ pathname }: { pathname: string | null }) {
   const current = currentIndex >= 0 ? steps[currentIndex] : null;
 
   return (
-    <details className="group px-1" aria-label="How it works">
-      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <section className="px-1" aria-label="How it works">
+      <div>
         <span className="flex items-center justify-between gap-2 text-[11px] font-semibold tracking-wider text-stone-500 uppercase">
           How it works
           <span className="tabular-nums normal-case">
-            {progress ? `${doneCount}/${steps.length}` : ""} <span className="inline-block transition group-open:rotate-90">›</span>
+            {progress ? `${doneCount}/${steps.length}` : ""}
           </span>
         </span>
         {/* One segment per step: green when done, accent for the current one. */}
@@ -138,7 +138,7 @@ function Tracker({ pathname }: { pathname: string | null }) {
             Next: <span className="font-semibold text-ink">{current.title}</span>
           </span>
         )}
-      </summary>
+      </div>
 
       <ol className="mt-2 space-y-0.5">
         {steps.map((s, i) => (
@@ -170,7 +170,7 @@ function Tracker({ pathname }: { pathname: string | null }) {
           </li>
         ))}
       </ol>
-    </details>
+    </section>
   );
 }
 

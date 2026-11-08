@@ -41,6 +41,17 @@ export function getLLMConfig(): { provider: Provider; model: string; apiKey: str
   return { provider, model, apiKey };
 }
 
+/** Which provider and model will be used, for display. Never includes the API key. */
+export function getLLMInfo(): { provider: string; model: string; configured: boolean } {
+  const raw = (process.env.LLM_PROVIDER ?? "anthropic").toLowerCase();
+  const provider = (PROVIDERS as readonly string[]).includes(raw) ? (raw as Provider) : null;
+  return {
+    provider: provider ?? raw,
+    model: provider ? process.env.LLM_MODEL || DEFAULT_MODELS[provider] : "unknown",
+    configured: Boolean(provider && process.env.LLM_API_KEY),
+  };
+}
+
 /** All providers stream, so progress can be reported while the questions are being written. */
 export async function complete(system: string, messages: ChatTurn[], onText: OnText = () => {}): Promise<LLMResult> {
   const { provider, model, apiKey } = getLLMConfig();

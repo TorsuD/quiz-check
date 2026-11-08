@@ -79,7 +79,7 @@ async function ExpertReviewContent({
                   href={`/admin/review/${quizId}?reviewer=${r.id}`}
                   className="group flex items-center gap-4 rounded-md border-2 border-line bg-field p-4 shadow-xs transition hover:-translate-x-px hover:-translate-y-px hover:bg-yellow-50 hover:shadow-sm"
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border-2 border-line bg-yellow-300 font-display text-lg text-ink">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border-2 border-line bg-yellow-300 font-display font-bold text-lg text-ink">
                     {r.id}
                   </span>
                   <span className="min-w-0 flex-1">

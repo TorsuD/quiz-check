@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -26,6 +26,19 @@ import {
 const AXIS = { fontSize: 11, fill: "var(--color-stone-500)" };
 const GRID = "var(--color-stone-200)";
 export const STATUS = { good: "var(--chart-good)", warn: "var(--chart-warn)", bad: "var(--chart-bad)" };
+
+/** True on phone-width screens, so axis label columns can give the bars more room. */
+function useNarrow() {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia("(max-width: 640px)");
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia("(max-width: 640px)").matches,
+    () => false,
+  );
+}
 
 type TipRow = { name: ReactNode; value: ReactNode; color?: string };
 
@@ -59,6 +72,7 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
 
 /** Each reviewer's factual-correctness verdicts as one stacked horizontal bar. */
 export function VerdictChart({ data }: { data: { name: string; yes: number; partially: number; no: number }[] }) {
+  const narrow = useNarrow();
   const series = [
     { key: "yes", label: "Correct", color: STATUS.good },
     { key: "partially", label: "Partially correct", color: STATUS.warn },
@@ -72,7 +86,7 @@ export function VerdictChart({ data }: { data: { name: string; yes: number; part
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, bottom: 0, left: 0 }} barSize={18}>
             <CartesianGrid horizontal={false} stroke={GRID} strokeDasharray="2 4" />
             <XAxis type="number" allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={88} tick={AXIS} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={narrow ? 72 : 88} tick={AXIS} axisLine={false} tickLine={false} />
             <Tooltip
               cursor={{ fill: "var(--color-stone-100)" }}
               content={({ active, payload, label }) =>
@@ -110,13 +124,21 @@ export function VerdictChart({ data }: { data: { name: string; yes: number; part
 
 /** Single-series horizontal bars, e.g. error tags. */
 export function HBars({ data, unit }: { data: { label: string; value: number }[]; unit: string }) {
+  const narrow = useNarrow();
   return (
     <div style={{ height: Math.max(120, data.length * 30 + 24) }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 24, bottom: 0, left: 0 }} barSize={14}>
           <CartesianGrid horizontal={false} stroke={GRID} strokeDasharray="2 4" />
           <XAxis type="number" allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
-          <YAxis type="category" dataKey="label" width={150} tick={{ ...AXIS, fill: "var(--color-stone-700)" }} axisLine={false} tickLine={false} />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={narrow ? 104 : 150}
+            tick={{ ...AXIS, fontSize: narrow ? 10 : 11, fill: "var(--color-stone-700)" }}
+            axisLine={false}
+            tickLine={false}
+          />
           <Tooltip
             cursor={{ fill: "var(--color-stone-100)" }}
             content={({ active, payload }) =>

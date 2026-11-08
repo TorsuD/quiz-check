@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { LogoMark, MenuIcon, XIcon } from "@/components/icons";
+import { LogoMark, MenuIcon, Wordmark, XIcon } from "@/components/icons";
 
 /** Small-screen top bar; the Menu button slides the sidebar (passed as children) in from the left. */
 export default function MobileNav({ children }: { children: ReactNode }) {
@@ -21,10 +21,10 @@ export default function MobileNav({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b-2 border-line bg-paper px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b-2 border-line bg-paper px-4 py-3 lg:hidden print:hidden">
         <Link href="/admin" className="flex items-center gap-2.5">
           <LogoMark />
-          <span className="font-semibold text-stone-900">QuizCheck</span>
+          <Wordmark />
         </Link>
         <button
           type="button"

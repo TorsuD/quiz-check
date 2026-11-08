@@ -1,45 +1,41 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Geist, Geist_Mono, IBM_Plex_Mono, Pixelify_Sans } from "next/font/google";
+import { Geist_Mono, Manrope, Quicksand } from "next/font/google";
 import { Toaster } from "@/components/toast";
-import { DEFAULT_THEME, THEME_BOOT_SCRIPT } from "@/lib/themes";
 import "./globals.css";
 
-// Fonts for every theme (see app/globals.css). Only the default theme's (retro) fonts are
-// preloaded; the others download when their theme is picked. next/font needs literal options,
-// so if you change DEFAULT_THEME in lib/themes.ts, move `preload: true` to that theme's fonts.
-
-// Retro: pixel headings, typewriter-style monospace body.
-const pixel = Pixelify_Sans({ variable: "--font-pixel", subsets: ["latin"], preload: true });
-const plex = IBM_Plex_Mono({
-  variable: "--font-plex",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  preload: true,
-});
-// Editorial: serif headings. Editorial and dark: Geist body.
-const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], preload: false });
-const geist = Geist({ variable: "--font-geist", subsets: ["latin"], preload: false });
+// Quicksand for headings and big numbers, Manrope for body text, Geist Mono for code and links.
+const quicksand = Quicksand({ variable: "--font-quicksand", subsets: ["latin"] });
+const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], preload: false });
 
+const TITLE = "QuizCheck: AI practice question study";
+const DESCRIPTION =
+  "Research tool for the project “Accuracy and Usefulness of AI-Generated Practice Questions from Lecture Notes.”";
+
+// Link previews (WhatsApp, iMessage, Slack…) need absolute image URLs. APP_URL is the public address;
+// on Vercel the production domain is used if APP_URL is not set.
+const siteUrl =
+  process.env.APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "QuizCheck: AI practice question study",
-  description:
-    "Research tool for the project “Accuracy and Usefulness of AI-Generated Practice Questions from Lecture Notes.”",
+  metadataBase: new URL(siteUrl),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "QuizCheck",
+  openGraph: { type: "website", siteName: "QuizCheck", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  const fonts = [pixel, plex, fraunces, geist, geistMono].map((f) => f.variable).join(" ");
   return (
-    // The boot script may change data-theme before React hydrates, hence suppressHydrationWarning.
-    <html lang="en" data-theme={DEFAULT_THEME} className={`${fonts} h-full antialiased`} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-      </head>
+    <html lang="en" className={`${quicksand.variable} ${manrope.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster />

@@ -97,13 +97,25 @@ export function RemoveControls({ questionId, removed }: { questionId: string; re
   );
 }
 
-export function PublishButton({ lectureId, disabled, count }: { lectureId: string; disabled: boolean; count: number }) {
+export function PublishButton({
+  lectureId,
+  disabled,
+  count,
+  className = "",
+  short = false,
+}: {
+  lectureId: string;
+  disabled: boolean;
+  count: number;
+  className?: string;
+  short?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   return (
     <>
-      <button className="btn-primary" disabled={disabled || pending} onClick={() => setConfirming(true)}>
-        {pending ? "Publishing…" : `Publish ${count} questions as survey`}
+      <button className={`btn-primary ${className}`} disabled={disabled || pending} onClick={() => setConfirming(true)}>
+        {pending ? "Publishing…" : short ? `Publish ${count} questions` : `Publish ${count} questions as survey`}
       </button>
       <ConfirmDialog
         open={confirming}

@@ -129,7 +129,7 @@ export function LogoMark({ className = "h-8 w-8 text-base", inverted = false }: 
     ? "bg-white text-brand-600"
     : "bg-yellow-300 text-ink";
   return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-md border-2 border-line shadow-xs ${colors} ${className}`}>
+    <span data-logo={inverted ? "inverted" : "default"} className={`inline-flex shrink-0 items-center justify-center rounded-md border-2 border-line shadow-xs ${colors} ${className}`}>
       <CheckIcon strokeWidth={3} />
     </span>
   );
@@ -158,3 +158,39 @@ export const TrashIcon = (p: IconProps) => (
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
   </Icon>
 );
+export const UploadIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+  </Icon>
+);
+export const CodeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />
+  </Icon>
+);
+export const TextIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 6h16M4 12h16M4 18h10" />
+  </Icon>
+);
+export const SearchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </Icon>
+);
+export const PanelLeftIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </Icon>
+);
+
+/** The "QuizCheck" name with "Check" in yellow. Use onDark on black backgrounds. */
+export function Wordmark({ className = "", onDark = false }: { className?: string; onDark?: boolean }) {
+  return (
+    <span className={`font-semibold ${onDark ? "text-white" : "text-ink"} ${className}`}>
+      Quiz<span className={onDark ? "text-accent-bright" : "text-accent-deep"}>Check</span>
+    </span>
+  );
+}

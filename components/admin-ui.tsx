@@ -51,7 +51,7 @@ export function StatCard({
       {icon && <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border-2 border-line text-lg ${TONES[tone]}`}>{icon}</span>}
       <div className="min-w-0">
         <p className="text-xs font-semibold tracking-wider text-stone-500 uppercase">{label}</p>
-        <p className="mt-0.5 font-display text-3xl text-ink tabular-nums">{value}</p>
+        <p className="mt-0.5 font-display font-bold text-3xl text-ink tabular-nums">{value}</p>
         {hint && <p className="mt-0.5 text-xs text-stone-500">{hint}</p>}
       </div>
     </div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GenerateEvent } from "@/app/api/admin/generate/route";
 import { SYSTEM_PROMPT, buildUserPrompt } from "@/lib/prompts";
 import { parseJsonLoose } from "@/lib/text";
 import { toast } from "@/components/toast";
+import { AlertIcon, CheckIcon, CodeIcon, FileIcon, SparklesIcon, TextIcon, UploadIcon, XIcon } from "@/components/icons";
 
 type Source = "llm" | "import";
 type NotesMode = "pdf" | "text";
@@ -33,7 +34,12 @@ const JSON_EXAMPLE = `{
   ]
 }`;
 
-export default function GenerateForm() {
+export type LLMInfo = { provider: string; model: string; configured: boolean };
+
+const COUNT_PRESETS = [5, 10, 15, 20];
+const MAX_PDF_MB = 10;
+
+export default function GenerateForm({ llm }: { llm: LLMInfo }) {
   const router = useRouter();
   const [source, setSource] = useState<Source>("llm");
   const [notesMode, setNotesMode] = useState<NotesMode>("pdf");
@@ -54,11 +60,24 @@ export default function GenerateForm() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
 
-  const hasNotes = notesMode === "pdf" ? Boolean(file) : text.trim().length > 0;
-  const ready =
-    title.trim() &&
-    hasNotes &&
-    (source === "llm" ? count >= 1 && count <= 30 : json.trim().length > 0);
+  const notesChars = notesMode === "pdf" ? pdf.text.length : text.trim().length;
+  const notesWords = useMemo(
+    () => (notesMode === "pdf" ? pdf.text : text).split(/\s+/).filter(Boolean).length,
+    [notesMode, pdf.text, text],
+  );
+  const hasNotes = notesMode === "pdf" ? pdf.status === "ok" && notesChars >= MIN_NOTES_CHARS : notesChars >= MIN_NOTES_CHARS;
+  // Live check of the pasted JSON for the summary panel (the server validates every field on import).
+  const jsonCheck = useMemo(() => {
+    if (!json.trim()) return null;
+    try {
+      const q = (parseJsonLoose(json).data as { questions?: unknown })?.questions;
+      return Array.isArray(q) && q.length > 0 ? { ok: true as const, n: q.length } : { ok: false as const };
+    } catch {
+      return { ok: false as const };
+    }
+  }, [json]);
+  const countOk = Number.isInteger(count) && count >= 1 && count <= 30;
+  const ready = Boolean(title.trim()) && hasNotes && (source === "llm" ? countOk && llm.configured : jsonCheck?.ok === true);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -169,156 +188,439 @@ export default function GenerateForm() {
     setFormatMsg(null);
   }
 
+  const checklist: { label: string; done: boolean; detail?: string }[] = [
+    { label: "Lecture title", done: Boolean(title.trim()), detail: title.trim() || undefined },
+    {
+      label: "Lecture notes",
+      done: hasNotes,
+      detail:
+        notesMode === "pdf" && pdf.status === "reading"
+          ? "Reading PDF…"
+          : notesChars > 0
+            ? `${notesWords.toLocaleString()} words`
+            : undefined,
+    },
+    source === "llm"
+      ? { label: "Number of questions", done: countOk, detail: countOk ? String(count) : "1–30" }
+      : {
+          label: "Questions JSON",
+          done: jsonCheck?.ok === true,
+          detail: jsonCheck ? (jsonCheck.ok ? `${jsonCheck.n} questions` : "Not valid yet") : undefined,
+        },
+  ];
+
   return (
-    <form onSubmit={onSubmit} className="card mt-6 space-y-5">
-      <div>
-        <span className="label">Question source</span>
-        <div className="segmented">
-          {(["llm", "import"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSource(s)}
-              className={source === s ? "segment-active" : "segment"}
-            >
-              {s === "llm" ? "Generate with LLM" : "Import JSON"}
-            </button>
-          ))}
-        </div>
-        {source === "import" && (
-          <p className="mt-2 text-xs text-stone-500">
-            Backup option: paste questions JSON produced elsewhere (e.g. by running the prompt in a chatbot). It is
-            validated exactly like LLM output.
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="title" className="label">
-          Lecture title
-        </label>
-        <input id="title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Week 5: Normalization" required />
-      </div>
-
-      <div>
-        <span className="label">Lecture notes</span>
-        <div className="segmented">
-          {(["pdf", "text"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setNotesMode(m)}
-              className={notesMode === m ? "segment-active" : "segment"}
-            >
-              {m === "pdf" ? "Upload PDF" : "Paste text"}
-            </button>
-          ))}
-        </div>
-        <div className="mt-3">
-          {notesMode === "pdf" ? (
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(e) => choosePdf(e.target.files?.[0] ?? null)}
-              className="block w-full cursor-pointer rounded-xl border-2 border-dashed border-stone-400 bg-stone-50/60 p-4 text-sm text-stone-600 transition hover:border-brand-300 hover:bg-brand-50/40 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-brand-600 file:px-3.5 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-700"
+    <form onSubmit={onSubmit} className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+      <div className="space-y-6">
+        {/* 1. Source */}
+        <Step n={1} title="How should the questions be made?">
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Question source">
+            <SourceCard
+              active={source === "llm"}
+              onSelect={() => setSource("llm")}
+              icon={<SparklesIcon />}
+              title="Generate with AI"
+              text={llm.configured ? `${llm.model} writes them from your notes.` : "Needs LLM_API_KEY on the server."}
             />
-          ) : (
-            <textarea
-              rows={10}
-              className="input font-mono text-sm"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Paste the lecture notes here…"
+            <SourceCard
+              active={source === "import"}
+              onSelect={() => setSource("import")}
+              icon={<CodeIcon />}
+              title="Import JSON"
+              text="Paste questions made with the study prompt in any chatbot."
             />
-          )}
-          {notesMode === "pdf" && pdf.status !== "idle" && <PdfPreview pdf={pdf} />}
-          <p className="mt-1.5 text-xs text-stone-500">
-            {notesMode === "pdf"
-              ? "Text-based PDFs only (max 10 MB). For scanned slides, paste the text instead."
-              : null}
-            {source === "import" && " The notes are still required: excerpts are checked against them, and expert review highlights them."}
-          </p>
-        </div>
-      </div>
+          </div>
+        </Step>
 
-      <div className="max-w-40">
-        <label htmlFor="count" className="label">
-          Number of questions
-        </label>
-        <input id="count" type="number" min={1} max={30} className="input" value={count} onChange={(e) => setCount(Number(e.target.value))} />
-        {source === "import" && <p className="mt-1 text-xs text-stone-500">Used only in the copied prompt.</p>}
-      </div>
+        {/* 2. Lecture */}
+        <Step n={2} title="Lecture">
+          <label htmlFor="title" className="label">
+            Title
+          </label>
+          <input
+            id="title"
+            className="input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Week 5: Normalization"
+            required
+          />
 
-      {source === "import" && (
-        <>
-          <div className="rounded-md border-2 border-line bg-brand-50/50 p-4">
-            <p className="text-sm font-semibold text-brand-900">Need the JSON? Use the exact study prompt.</p>
-            <p className="mt-1 text-xs text-stone-500">
-              Copies the system prompt and lecture notes from <code>lib/prompts.ts</code> so the questions are produced the same way.
-              {notesMode === "pdf" && pdf.status === "reading" && " Reading the PDF…"}
-              {notesMode === "pdf" && pdf.status === "idle" && " Choose a PDF above first."}
-            </p>
-            <button type="button" onClick={copyPrompt} disabled={!notesText} className="btn-secondary mt-3">
-              {copied ? "Copied!" : "Copy prompt"}
-            </button>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <span className="label mb-0">Notes</span>
+            <div className="segmented" role="tablist" aria-label="Notes format">
+              {(
+                [
+                  ["pdf", "Upload PDF", <UploadIcon key="i" />],
+                  ["text", "Paste text", <TextIcon key="i" />],
+                ] as const
+              ).map(([m, label, icon]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={notesMode === m}
+                  onClick={() => setNotesMode(m)}
+                  className={`${notesMode === m ? "segment-active" : "segment"} inline-flex items-center gap-1.5`}
+                >
+                  {icon} {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="json" className="label">
-              Questions JSON
-            </label>
-            <textarea
-              id="json"
-              rows={12}
-              className="input font-mono text-xs"
-              value={json}
-              onChange={(e) => {
-                setJson(e.target.value);
-                setFormatMsg(null);
-              }}
-              placeholder={JSON_EXAMPLE}
-              spellCheck={false}
-            />
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-stone-500">
-              <button type="button" onClick={formatJson} disabled={!json.trim()} className="btn-secondary">
-                Format JSON
-              </button>
-              <label className="btn-secondary cursor-pointer">
-                Load .json file
-                <input type="file" accept="application/json,.json,.txt" className="sr-only" onChange={(e) => loadJsonFile(e.target.files?.[0])} />
-              </label>
-              <span>Code fences and surrounding text are stripped automatically.</span>
-            </div>
-            {formatMsg && (
-              <p role="status" className={`mt-2 text-xs ${formatMsg.ok ? "text-emerald-800" : "text-rose-700"}`}>
-                {formatMsg.text}
+          <div className="mt-3">
+            {notesMode === "pdf" ? (
+              <PdfDropzone file={file} pdf={pdf} onFile={choosePdf} />
+            ) : (
+              <>
+                <textarea
+                  rows={12}
+                  className="input text-sm leading-relaxed"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Paste the lecture notes here…"
+                />
+                <p className={`mt-1.5 text-xs tabular-nums ${notesChars > 0 && notesChars < MIN_NOTES_CHARS ? "text-amber-700" : "text-stone-500"}`}>
+                  {notesWords.toLocaleString()} words · {notesChars.toLocaleString()} characters
+                  {notesChars > 0 && notesChars < MIN_NOTES_CHARS && ` · at least ${MIN_NOTES_CHARS} characters needed`}
+                </p>
+              </>
+            )}
+            {source === "import" && (
+              <p className="mt-2 text-xs text-stone-500">
+                Notes are still needed: quoted excerpts are checked against them, and expert reviewers read them.
               </p>
             )}
           </div>
+        </Step>
 
-          <div className="max-w-sm">
-            <label htmlFor="model" className="label">
-              Model used <span className="font-normal text-stone-500">(recorded with the questions)</span>
-            </label>
-            <input id="model" className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. claude-opus-5-5 via claude.ai" />
-            <p className="mt-1 text-xs text-stone-500">Leave blank to record “manual-import”.</p>
-          </div>
-        </>
+        {/* 3. Questions */}
+        <Step n={3} title={source === "llm" ? "Questions" : "Import"}>
+          <span className="label">{source === "llm" ? "How many questions?" : "Questions to ask for in the prompt"}</span>
+          <CountPicker value={count} onChange={setCount} />
+
+          {source === "import" && (
+            <div className="mt-6 space-y-6">
+              <div className="rounded-lg border-2 border-line bg-brand-50/60 p-4">
+                <p className="text-sm font-semibold text-ink">Use the exact study prompt</p>
+                <p className="mt-1 text-xs text-stone-600">
+                  Copies the same instructions the built-in AI uses, plus your title and notes, so imported questions are made the same way.
+                  {notesMode === "pdf" && pdf.status === "reading" && " Reading the PDF…"}
+                  {!notesText && pdf.status !== "reading" && " Add your notes first."}
+                </p>
+                <button type="button" onClick={copyPrompt} disabled={!notesText} className="btn-secondary mt-3">
+                  {copied ? <CheckIcon /> : null} {copied ? "Copied" : "Copy prompt"}
+                </button>
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <label htmlFor="json" className="label mb-0">
+                    Questions JSON
+                  </label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={formatJson} disabled={!json.trim()} className="btn-secondary px-3 py-1.5 text-xs">
+                      Format
+                    </button>
+                    <label className="btn-secondary cursor-pointer px-3 py-1.5 text-xs">
+                      Load file
+                      <input type="file" accept="application/json,.json,.txt" className="sr-only" onChange={(e) => loadJsonFile(e.target.files?.[0])} />
+                    </label>
+                  </div>
+                </div>
+                <textarea
+                  id="json"
+                  rows={12}
+                  className="input font-mono text-xs"
+                  value={json}
+                  onChange={(e) => {
+                    setJson(e.target.value);
+                    setFormatMsg(null);
+                  }}
+                  placeholder={JSON_EXAMPLE}
+                  spellCheck={false}
+                />
+                {formatMsg ? (
+                  <p role="status" className={`mt-1.5 text-xs ${formatMsg.ok ? "text-emerald-700" : "text-rose-700"}`}>
+                    {formatMsg.text}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-xs text-stone-500">Code fences, chatty text and curly quotes are cleaned up automatically.</p>
+                )}
+              </div>
+
+              <div className="max-w-sm">
+                <label htmlFor="model" className="label">
+                  Model used
+                </label>
+                <input id="model" className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. claude-opus-5-5 via claude.ai" />
+                <p className="mt-1.5 text-xs text-stone-500">Saved with the questions for the study. Blank records “manual-import”.</p>
+              </div>
+            </div>
+          )}
+        </Step>
+      </div>
+
+      {/* Summary + action: sticky beside the form on wide screens, after it on phones. */}
+      <aside className="card space-y-5 lg:sticky lg:top-8">
+        {busy && progress ? (
+          <GenerationProgress progress={progress} />
+        ) : (
+          <>
+            <div>
+              <p className="label">Ready to {source === "llm" ? "generate" : "import"}?</p>
+              <ul className="space-y-2.5">
+                {checklist.map((c) => (
+                  <li key={c.label} className="flex items-start gap-2.5 text-sm">
+                    <span
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                        c.done ? "bg-emerald-500 text-white" : "border-2 border-stone-300"
+                      }`}
+                    >
+                      {c.done && <CheckIcon strokeWidth={3.5} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={c.done ? "text-ink" : "text-stone-500"}>{c.label}</span>
+                      {c.detail && <span className="block truncate text-xs text-stone-500">{c.detail}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {source === "llm" && (
+              <div className="rounded-lg bg-stone-50 px-3 py-2.5 text-xs text-stone-600">
+                {llm.configured ? (
+                  <>
+                    Model <span className="font-mono font-medium text-ink">{llm.model}</span>
+                    <span className="block text-stone-500">via {llm.provider} · usually under a minute</span>
+                  </>
+                ) : (
+                  <span className="flex items-start gap-1.5 text-amber-800">
+                    <AlertIcon className="mt-0.5 shrink-0" /> No API key configured on the server. Use Import JSON instead.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800">
+                {error}
+              </p>
+            )}
+
+            <button type="submit" disabled={!ready || busy} className="btn-primary w-full py-3">
+              {source === "llm" ? <SparklesIcon /> : <CodeIcon />}
+              {source === "llm" ? (busy ? "Generating…" : `Generate ${countOk ? count : ""} questions`) : busy ? "Importing…" : "Import questions"}
+            </button>
+            <p className="text-center text-xs text-stone-500">You&apos;ll review every question before anything is published.</p>
+          </>
+        )}
+      </aside>
+    </form>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <section className="card">
+      <h2 className="mb-4 flex items-center gap-3 text-lg">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">{n}</span>
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function SourceCard({
+  active,
+  onSelect,
+  icon,
+  title,
+  text,
+}: {
+  active: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onSelect}
+      className={`relative flex items-start gap-3 rounded-lg border-2 p-4 text-left transition ${
+        active ? "border-brand-600 bg-brand-50/70 ring-4 ring-brand-600/10" : "border-line bg-field hover:border-brand-300"
+      }`}
+    >
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${
+          active ? "bg-brand-600 text-white" : "bg-stone-100 text-stone-500"
+        }`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 pr-5">
+        <span className="block font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-stone-500">{text}</span>
+      </span>
+      {active && (
+        <span className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[11px] text-white">
+          <CheckIcon strokeWidth={3.5} />
+        </span>
       )}
+    </button>
+  );
+}
 
-      {error && (
-        <p role="alert" className="rounded-md border-2 border-line bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800">
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button type="submit" disabled={!ready || busy} className="btn-primary">
-          {source === "llm" ? (busy ? "Generating…" : "Generate questions") : busy ? "Importing…" : "Import questions"}
+function CountPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const clamp = (n: number) => Math.min(30, Math.max(1, n));
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {COUNT_PRESETS.map((n) => (
+        <button
+          key={n}
+          type="button"
+          aria-pressed={value === n}
+          onClick={() => onChange(n)}
+          className={`h-10 min-w-12 rounded-lg border-2 px-3 text-sm font-semibold tabular-nums transition ${
+            value === n ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-field text-stone-700 hover:border-brand-300"
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+      <div className="flex h-10 items-center rounded-lg border-2 border-line bg-field">
+        <button type="button" aria-label="Fewer" onClick={() => onChange(clamp(value - 1))} className="h-full px-3 text-stone-500 hover:text-ink">
+          −
+        </button>
+        <input
+          id="count"
+          type="number"
+          min={1}
+          max={30}
+          aria-label="Number of questions"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-10 bg-transparent text-center text-sm font-semibold tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <button type="button" aria-label="More" onClick={() => onChange(clamp(value + 1))} className="h-full px-3 text-stone-500 hover:text-ink">
+          +
         </button>
       </div>
-      {busy && progress && <GenerationProgress progress={progress} />}
-    </form>
+      <span className="text-xs text-stone-500">1–30</span>
+    </div>
+  );
+}
+
+function formatBytes(n: number) {
+  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Drag-and-drop (or click) PDF picker, with the chosen file and what was read from it. */
+function PdfDropzone({
+  file,
+  pdf,
+  onFile,
+}: {
+  file: File | null;
+  pdf: { status: string; text: string; error?: string };
+  onFile: (f: File | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function take(f: File | undefined | null) {
+    if (!f) return;
+    if (f.type && f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("That isn't a PDF. Choose a .pdf file, or paste the text instead.");
+      return;
+    }
+    if (f.size > MAX_PDF_MB * 1024 * 1024) {
+      toast.error(`That PDF is larger than ${MAX_PDF_MB} MB. Paste the text instead.`);
+      return;
+    }
+    onFile(f);
+  }
+
+  if (file) {
+    return (
+      <div>
+        <div className="flex items-center gap-3 rounded-lg border-2 border-line bg-field p-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-lg text-rose-600">
+            <FileIcon />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-ink">{file.name}</span>
+            <span className="block text-xs text-stone-500">
+              {formatBytes(file.size)}
+              {pdf.status === "reading" && " · reading text…"}
+              {pdf.status === "ok" && ` · ${pdf.text.split(/\s+/).filter(Boolean).length.toLocaleString()} words found`}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              onFile(null);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+            aria-label="Remove PDF"
+            className="rounded-md p-1.5 text-stone-400 hover:bg-stone-100 hover:text-ink"
+          >
+            <XIcon />
+          </button>
+        </div>
+        {pdf.status !== "idle" && <PdfPreview pdf={pdf} />}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        take(e.dataTransfer.files?.[0]);
+      }}
+      onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="Upload a PDF of the lecture notes"
+      className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition ${
+        dragging ? "border-brand-500 bg-brand-50" : "border-stone-300 bg-stone-50/60 hover:border-brand-400 hover:bg-brand-50/40"
+      }`}
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-xl text-brand-600">
+        <UploadIcon />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-ink">
+        {dragging ? "Drop the PDF here" : <>Drag a PDF here, or <span className="text-brand-600">browse</span></>}
+      </p>
+      <p className="mt-1 text-xs text-stone-500">Text-based PDFs up to {MAX_PDF_MB} MB. For scanned slides, paste the text instead.</p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(e) => take(e.target.files?.[0])}
+      />
+    </div>
   );
 }
 
@@ -385,10 +687,10 @@ function GenerationProgress({ progress: p }: { progress: Progress }) {
   pct = Math.round(pct);
 
   return (
-    <div className="rounded-md border-2 border-line bg-field p-4" aria-live="polite">
+    <div aria-live="polite">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-sm font-semibold text-ink">{status}</p>
-        <p className="font-display text-2xl text-ink tabular-nums">{pct}%</p>
+        <p className="font-display font-bold text-2xl text-ink tabular-nums">{pct}%</p>
       </div>
       <div
         role="progressbar"
@@ -396,9 +698,9 @@ function GenerationProgress({ progress: p }: { progress: Progress }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
-        className="mt-2 h-4 overflow-hidden rounded-sm border-2 border-line bg-surface"
+        className="mt-3 h-2.5 overflow-hidden rounded-full bg-stone-100"
       >
-        <div className="stripes h-full bg-brand-600 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+        <div className="stripes h-full rounded-full bg-brand-600 transition-[width] duration-500" style={{ width: `${pct}%` }} />
       </div>
       <div className="mt-2 flex flex-wrap justify-between gap-x-4 text-xs text-stone-500 tabular-nums">
         <span>{eta}</span>
