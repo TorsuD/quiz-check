@@ -60,7 +60,6 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
   const [copied, setCopied] = useState(false);
   const [formatMsg, setFormatMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
 
   const notesChars = notesMode === "pdf" ? pdf.text.length : text.trim().length;
@@ -86,7 +85,6 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
     e.preventDefault();
     if (!ready) return;
     setBusy(true);
-    setError(null);
     const form = new FormData();
     form.set("mode", source);
     form.set("title", title.trim());
@@ -128,7 +126,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
       );
       router.push(`/admin/lectures/${lectureId}`);
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
       setBusy(false);
       setProgress(null);
     }
@@ -367,9 +365,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
 
       {/* Summary + action: sticky beside the form on wide screens, after it on phones. */}
       <aside className="card space-y-5 lg:sticky lg:top-8">
-        {busy && progress ? (
-          <GenerationProgress progress={progress} />
-        ) : (
+        {(
           <>
             <div>
               <p className="label">Ready to {source === "llm" ? "generate" : "import"}?</p>
@@ -407,12 +403,6 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
               </div>
             )}
 
-            {error && (
-              <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800">
-                {error}
-              </p>
-            )}
-
             <button type="submit" disabled={!ready || busy} className="btn-primary w-full py-3">
               {source === "llm" ? <SparklesIcon /> : <CodeIcon />}
               {source === "llm" ? (busy ? "Generating…" : `Generate ${countOk ? count : ""} questions`) : busy ? "Importing…" : "Import questions"}
@@ -421,6 +411,15 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
           </>
         )}
       </aside>
+
+      {/* While generating: a loading toast at the top centre of the screen. The page behind stays visible. */}
+      {busy && progress && (
+        <div className="pointer-events-none fixed inset-x-4 top-4 z-[60] flex justify-center">
+          <div role="status" className="toast-in card pointer-events-auto w-full max-w-md !p-4 shadow-lg">
+            <GenerationProgress progress={progress} />
+          </div>
+        </div>
+      )}
     </form>
   );
 }

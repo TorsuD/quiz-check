@@ -2,6 +2,7 @@ import { isAdmin, unauthorizedResponse } from "@/lib/admin";
 import { connectDB } from "@/lib/db";
 import { extractFileText, MAX_UPLOAD_BYTES, UnsupportedFileError } from "@/lib/extract";
 import { GenerationError, excerptAppearsIn, generateQuestions, parseGeneration, type GenerationOutput } from "@/lib/generate";
+import { friendlyLLMError } from "@/lib/llm";
 import { Lecture, Question } from "@/lib/models";
 
 // Generation with a large model can take a minute or more.
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
       } catch (err) {
         console.error("Generation failed", err);
         const message = err instanceof Error ? err.message : "Unknown error";
-        send({ type: "error", error: err instanceof GenerationError ? message : `The LLM request failed: ${message}` });
+        send({ type: "error", error: err instanceof GenerationError ? message : friendlyLLMError(err) });
       } finally {
         controller.close();
       }
