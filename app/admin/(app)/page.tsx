@@ -112,7 +112,7 @@ async function LectureList({ searchParams }: { searchParams: PageProps<"/admin">
       quizId: quiz ? String(quiz._id) : null,
       active: total - removed,
       removed,
-      source: l.sourceType === "pdf" ? (l.fileName ?? "PDF") : "Pasted text",
+      source: l.sourceType !== "text" ? (l.fileName ?? "File") : "Pasted text",
       sourceType: l.sourceType,
       created: relativeDate(l.createdAt),
       started: p?.started ?? 0,
@@ -277,7 +277,7 @@ function LectureTile({ r }: { r: Row }) {
           </span>
           {r.removed > 0 && <span className="text-rose-600">· {r.removed} removed</span>}
           <span className="inline-flex min-w-0 items-center gap-1">
-            · {r.sourceType === "pdf" ? <FileIcon className="shrink-0" /> : <TextIcon className="shrink-0" />}
+            · {r.sourceType !== "text" ? <FileIcon className="shrink-0" /> : <TextIcon className="shrink-0" />}
             <span className="max-w-40 truncate">{r.source}</span>
           </span>
         </p>

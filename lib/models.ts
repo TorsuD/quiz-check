@@ -19,14 +19,14 @@ function model<T>(name: string, schema: Schema<T>): Model<T> {
 export interface LectureDoc extends Timestamps {
   _id: Types.ObjectId;
   title: string;
-  sourceType: "pdf" | "text";
+  sourceType: "pdf" | "file" | "text"; // "pdf" is legacy; new uploads of any type are "file"
   fileName: string | null;
   text: string;
 }
 const lectureSchema = new Schema<LectureDoc>(
   {
     title: { type: String, required: true, trim: true },
-    sourceType: { type: String, enum: ["pdf", "text"], required: true },
+    sourceType: { type: String, enum: ["pdf", "file", "text"], required: true },
     fileName: { type: String, default: null },
     text: { type: String, required: true },
   },

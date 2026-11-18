@@ -8,7 +8,7 @@ Researchers upload lecture notes, an LLM generates multiple-choice practice ques
 
 ## Stack
 
-Next.js 16 (App Router, Cache Components) · TypeScript · Tailwind CSS 4 · MongoDB + Mongoose · pdf-parse · qrcode · zod. LLM: Anthropic, OpenAI, or Gemini, swappable in `lib/llm.ts`.
+Next.js 16 (App Router, Cache Components) · TypeScript · Tailwind CSS 4 · MongoDB + Mongoose · pdf-parse · officeparser · qrcode · zod. LLM: Anthropic, OpenAI, or Gemini, swappable in `lib/llm.ts`.
 
 ## Setup
 
@@ -48,7 +48,7 @@ The script reads `.env.local` (or `.env`) for `MONGODB_URI`.
 
 ## Workflow
 
-1. **Generate** (`/admin/generate`): upload a text-based PDF or paste the notes, give a title, and pick a number of questions (default 10). The server extracts the text and calls the LLM with the prompt in `lib/prompts.ts`. It strips code fences, validates the JSON with zod, and retries once with the validation error if the output is invalid.
+1. **Generate** (`/admin/generate`): upload a file (PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, HTML, Markdown, CSV or text) or paste the notes, give a title, and pick a number of questions (default 10). The server extracts the text and calls the LLM with the prompt in `lib/prompts.ts`. It strips code fences, validates the JSON with zod, and retries once with the validation error if the output is invalid.
    - **Import JSON (backup):** if the API is down or out of credit, switch the form to *Import JSON*. *Copy prompt* copies the exact study prompt with your pasted notes. Run it in any chatbot and paste the result back. The import goes through the same fence stripping and validation as LLM output, and the "Model used" label you enter is stored in each question's `model` field, with `provider: "import"`. The lecture notes are still required.
 2. **Review** (`/admin/lectures/[id]`): check each question, its answer key, the explanation, and the source excerpt. A warning badge marks questions whose excerpt was not found word for word in the notes. **Remove** asks for a reason. Removed questions are never deleted: they stay in MongoDB with `removedBeforeSurvey: true`, `removalReason`, and `removedAt`.
 3. **Publish**: this saves the remaining questions, in order, as a quiz and locks the set.
@@ -101,7 +101,7 @@ All collections have `createdAt` / `updatedAt`.
 
 | Model | Key fields |
 | --- | --- |
-| Lecture | title, sourceType (pdf/text), fileName, text |
+| Lecture | title, sourceType (file/text; legacy pdf), fileName, text |
 | Question | lectureId, order, question, options[4], correctIndex, explanation, sourceExcerpt, excerptFoundInText, difficulty, model, provider, generatedAt, removedBeforeSurvey, removalReason, removedAt |
 | Quiz | lectureId, title, questionIds (snapshot at publish time), isOpen, publishedAt |
 | Participant | quizId, participantId (anonymous UUID), consentedAt, completedAt, userAgent |
@@ -136,7 +136,7 @@ scripts/seed.ts        sample data
 Notes:
 
 - The generation endpoint sets `maxDuration = 300` seconds. Large lectures with a big model can take a minute or more, which fits within Vercel's limits when Fluid compute is on (the default).
-- Vercel limits request bodies to about 4.5 MB. For larger PDFs, paste the text instead.
+- Vercel limits request bodies to about 4.5 MB. For larger files, paste the text instead.
 - Run a full test on your phone, using the deployed URL, before class.
 
 ## Scripts

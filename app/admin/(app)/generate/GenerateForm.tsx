@@ -38,6 +38,9 @@ export type LLMInfo = { provider: string; model: string; configured: boolean };
 
 const COUNT_PRESETS = [5, 10, 15, 20];
 const MAX_PDF_MB = 10;
+/** File types the server can read (lib/extract.ts). Old .doc/.ppt/.xls get a helpful server error. */
+const FILE_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "odt", "odp", "ods", "odg", "rtf", "csv", "md", "markdown", "html", "htm", "epub", "tex", "txt", "doc", "ppt", "xls"];
+const ACCEPT = FILE_EXTENSIONS.map((e) => `.${e}`).join(",");
 
 export default function GenerateForm({ llm }: { llm: LLMInfo }) {
   const router = useRouter();
@@ -142,7 +145,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
     try {
       const res = await fetch("/api/admin/extract-text", { method: "POST", body: form });
       const data = await res.json().catch(() => ({ error: `Server error (${res.status}).` }));
-      if (!res.ok) throw new Error(data.error ?? "Could not read the PDF.");
+      if (!res.ok) throw new Error(data.error ?? "Could not read that file.");
       // Ignore the result if another file was chosen meanwhile.
       setPdf((cur) => (cur.name === f.name ? { status: "ok", text: data.text as string, name: f.name } : cur));
     } catch (err) {
@@ -195,7 +198,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
       done: hasNotes,
       detail:
         notesMode === "pdf" && pdf.status === "reading"
-          ? "Reading PDF…"
+          ? "Reading file…"
           : notesChars > 0
             ? `${notesWords.toLocaleString()} words`
             : undefined,
@@ -251,7 +254,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
             <div className="segmented" role="tablist" aria-label="Notes format">
               {(
                 [
-                  ["pdf", "Upload PDF", <UploadIcon key="i" />],
+                  ["pdf", "Upload file", <UploadIcon key="i" />],
                   ["text", "Paste text", <TextIcon key="i" />],
                 ] as const
               ).map(([m, label, icon]) => (
@@ -306,7 +309,7 @@ export default function GenerateForm({ llm }: { llm: LLMInfo }) {
                 <p className="text-sm font-semibold text-ink">Use the exact study prompt</p>
                 <p className="mt-1 text-xs text-stone-600">
                   Copies the same instructions the built-in AI uses, plus your title and notes, so imported questions are made the same way.
-                  {notesMode === "pdf" && pdf.status === "reading" && " Reading the PDF…"}
+                  {notesMode === "pdf" && pdf.status === "reading" && " Reading the file…"}
                   {!notesText && pdf.status !== "reading" && " Add your notes first."}
                 </p>
                 <button type="button" onClick={copyPrompt} disabled={!notesText} className="btn-secondary mt-3">
@@ -536,12 +539,13 @@ function PdfDropzone({
 
   function take(f: File | undefined | null) {
     if (!f) return;
-    if (f.type && f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("That isn't a PDF. Choose a .pdf file, or paste the text instead.");
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!FILE_EXTENSIONS.includes(ext)) {
+      toast.error("That file type isn't supported. Use PDF, Word, PowerPoint, Excel or a text file, or paste the text instead.");
       return;
     }
     if (f.size > MAX_PDF_MB * 1024 * 1024) {
-      toast.error(`That PDF is larger than ${MAX_PDF_MB} MB. Paste the text instead.`);
+      toast.error(`That file is larger than ${MAX_PDF_MB} MB. Paste the text instead.`);
       return;
     }
     onFile(f);
@@ -568,7 +572,7 @@ function PdfDropzone({
               onFile(null);
               if (inputRef.current) inputRef.current.value = "";
             }}
-            aria-label="Remove PDF"
+            aria-label="Remove file"
             className="rounded-md p-1.5 text-stone-400 hover:bg-stone-100 hover:text-ink"
           >
             <XIcon />
@@ -600,7 +604,7 @@ function PdfDropzone({
       }}
       role="button"
       tabIndex={0}
-      aria-label="Upload a PDF of the lecture notes"
+      aria-label="Upload a file of the lecture notes"
       className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition ${
         dragging ? "border-brand-500 bg-brand-50" : "border-stone-300 bg-stone-50/60 hover:border-brand-400 hover:bg-brand-50/40"
       }`}
@@ -609,13 +613,13 @@ function PdfDropzone({
         <UploadIcon />
       </span>
       <p className="mt-3 text-sm font-semibold text-ink">
-        {dragging ? "Drop the PDF here" : <>Drag a PDF here, or <span className="text-brand-600">browse</span></>}
+        {dragging ? "Drop the file here" : <>Drag a file here, or <span className="text-brand-600">browse</span></>}
       </p>
-      <p className="mt-1 text-xs text-stone-500">Text-based PDFs up to {MAX_PDF_MB} MB. For scanned slides, paste the text instead.</p>
+      <p className="mt-1 text-xs text-stone-500">PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, HTML, Markdown, CSV or text, up to {MAX_PDF_MB} MB. Scanned or image-only files can&apos;t be read; paste the text instead.</p>
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={ACCEPT}
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => take(e.target.files?.[0])}
@@ -713,9 +717,9 @@ function GenerationProgress({ progress: p }: { progress: Progress }) {
 
 const MIN_NOTES_CHARS = 200; // same minimum the server enforces
 
-/** Shows what was read out of the PDF, so the admin can check it before generating or copying the prompt. */
+/** Shows what was read out of the file, so the admin can check it before generating or copying the prompt. */
 function PdfPreview({ pdf }: { pdf: { status: string; text: string; error?: string } }) {
-  if (pdf.status === "reading") return <p className="mt-2 text-sm text-stone-500">Reading text from the PDF…</p>;
+  if (pdf.status === "reading") return <p className="mt-2 text-sm text-stone-500">Reading text from the file…</p>;
   if (pdf.status === "error")
     return <p className="mt-2 rounded-md border-2 border-line bg-rose-50 px-3 py-2 text-sm text-rose-800">{pdf.error}</p>;
   const words = pdf.text.split(/\s+/).filter(Boolean).length;
@@ -731,7 +735,7 @@ function PdfPreview({ pdf }: { pdf: { status: string; text: string; error?: stri
       </summary>
       {tooShort && (
         <p className="mx-3 mb-2 text-sm text-amber-800">
-          Very little text was found. If the PDF is scanned slides or images, switch to “Paste text” instead.
+          Very little text was found. If the file is scanned slides or images, switch to “Paste text” instead.
         </p>
       )}
       <pre className="max-h-64 overflow-auto border-t-2 border-line px-3 py-2 font-mono text-xs whitespace-pre-wrap text-stone-700">

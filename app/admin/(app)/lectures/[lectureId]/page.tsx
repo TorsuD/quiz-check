@@ -72,8 +72,8 @@ async function LectureDetail({ params }: { params: Promise<{ lectureId: string }
           </div>
           <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-500">
             <span className="inline-flex items-center gap-1.5">
-              {lecture.sourceType === "pdf" ? <FileIcon /> : <TextIcon />}
-              {lecture.sourceType === "pdf" ? (lecture.fileName ?? "PDF") : "Pasted text"}
+              {lecture.sourceType !== "text" ? <FileIcon /> : <TextIcon />}
+              {lecture.sourceType !== "text" ? (lecture.fileName ?? "File") : "Pasted text"}
             </span>
             {first && (
               <>

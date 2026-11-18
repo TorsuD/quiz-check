@@ -1,12 +1,12 @@
 import { isAdmin, unauthorizedResponse } from "@/lib/admin";
 import { connectDB } from "@/lib/db";
+import { extractFileText, MAX_UPLOAD_BYTES, UnsupportedFileError } from "@/lib/extract";
 import { GenerationError, excerptAppearsIn, generateQuestions, parseGeneration, type GenerationOutput } from "@/lib/generate";
 import { Lecture, Question } from "@/lib/models";
 
 // Generation with a large model can take a minute or more.
 export const maxDuration = 300;
 
-const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_CHARS = 400_000;
 const MIN_TEXT_CHARS = 200;
 
@@ -40,26 +40,26 @@ export async function POST(request: Request) {
   if (mode === "import" && !importJson) return fail("Paste or upload the questions JSON.");
 
   let text = pasted;
-  let sourceType: "pdf" | "text" = "text";
+  let sourceType: "file" | "text" = "text";
   let fileName: string | null = null;
 
   if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_PDF_BYTES) return fail("PDF is larger than 10 MB.");
-    if (file.type && file.type !== "application/pdf") return fail("Only PDF files are supported.");
+    if (file.size > MAX_UPLOAD_BYTES) return fail("File is larger than 10 MB.");
     try {
-      text = await (await import("@/lib/pdf")).extractPdfText(new Uint8Array(await file.arrayBuffer()));
+      text = await extractFileText(file);
     } catch (err) {
-      console.error("PDF extraction failed", err);
-      return fail("Could not read text from that PDF. If it is a scanned image, paste the text instead.");
+      if (err instanceof UnsupportedFileError) return fail(err.message);
+      console.error("File extraction failed", err);
+      return fail("Could not read text from that file. If it is a scanned image, paste the text instead.");
     }
-    sourceType = "pdf";
+    sourceType = "file";
     fileName = file.name;
   }
 
   if (text.length < MIN_TEXT_CHARS) {
     return fail(
-      sourceType === "pdf"
-        ? "Very little text was found in the PDF (is it scanned?). Paste the text instead."
+      sourceType === "file"
+        ? "Very little text was found in the file (is it scanned or image-only?). Paste the text instead."
         : "Please paste the lecture notes (at least a few paragraphs).",
     );
   }
@@ -108,7 +108,7 @@ export type GenerateEvent =
 
 async function save(
   output: GenerationOutput,
-  source: { title: string; sourceType: "pdf" | "text"; fileName: string | null; text: string },
+  source: { title: string; sourceType: "file" | "text"; fileName: string | null; text: string },
 ) {
   await connectDB();
   const generatedAt = new Date();
