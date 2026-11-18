@@ -294,20 +294,23 @@ export async function computeResults(quizId: string) {
     notAccurate: group(comparable.filter((q) => q.expertVerdict !== "accurate")),
     correlations: [
       {
-        label: "Expert accuracy score vs students' perceived accuracy",
+        label: "Do students rate a question as more accurate when the experts scored it higher?",
         expect: "positive if students can spot inaccurate questions",
+        sign: 1 as 1 | -1,
         rho: spearman(pairs((q) => q.students!.perceivedAccuracy)),
         n: pairs((q) => q.students!.perceivedAccuracy).length,
       },
       {
-        label: "Expert accuracy score vs students' error-flag rate",
+        label: "Do students flag more errors on questions the experts scored lower?",
         expect: "negative if students flag the inaccurate ones",
+        sign: -1 as 1 | -1,
         rho: spearman(pairs((q) => q.students!.flaggedPct)),
         n: pairs((q) => q.students!.flaggedPct).length,
       },
       {
-        label: "Expert clarity vs student clarity",
+        label: "Do students find a question clear when the experts do?",
         expect: "positive if experts and students agree on wording",
+        sign: 1 as 1 | -1,
         rho: spearman(
           comparable
             .map((q) => [expertClarity(q), q.students!.clarity] as const)

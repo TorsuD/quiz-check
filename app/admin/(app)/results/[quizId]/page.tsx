@@ -576,6 +576,16 @@ async function ResultsContent({ params }: { params: Promise<{ quizId: string }> 
   );
 }
 
+/** Plain-English reading of a correlation. `sign` is the direction that counts as "agreeing" with the experts. */
+function agreement(rho: number | null, sign: 1 | -1): { text: string; tone: string } {
+  if (rho === null) return { text: "Not enough data yet", tone: "bg-stone-100 text-stone-600" };
+  const a = rho * sign;
+  if (a >= 0.5) return { text: "Yes, clearly", tone: "bg-emerald-100 text-emerald-800" };
+  if (a >= 0.25) return { text: "Somewhat", tone: "bg-emerald-50 text-emerald-800" };
+  if (a > -0.25) return { text: "No clear link", tone: "bg-stone-100 text-stone-700" };
+  return { text: "Opposite of expected", tone: "bg-rose-100 text-rose-800" };
+}
+
 function StudentsVsExperts({ r }: { r: Results }) {
   const c = r.comparison;
   if (c.n === 0) {
@@ -615,36 +625,32 @@ function StudentsVsExperts({ r }: { r: Results }) {
           <p className="mt-1.5 text-[11px] text-stone-500">* includes questions where the reviewers were split.</p>
         </div>
         <div>
-          <div className={tableWrap}>
-            <table className="w-full text-sm">
-              <thead className="bg-stone-50">
-                <tr>
-                  <th className={th}>
-                    Rank correlation (Spearman <span className="normal-case">ρ</span>)
-                  </th>
-                  <th className={th}>
-                    <span className="normal-case">ρ</span>
-                  </th>
-                  <th className={th}>n</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {c.correlations.map((k) => (
-                  <tr key={k.label}>
-                    <td className={td}>
-                      {k.label}
-                      <span className="block text-xs text-stone-500">Expected {k.expect}</span>
-                    </td>
-                    <td className={`${td} font-semibold`}>{fmtRho(k.rho)}</td>
-                    <td className={td}>{k.n}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-1.5 text-[11px] text-stone-500">
-            ρ needs at least 3 questions and some variation; “–” means not enough data yet.
-          </p>
+          <h3 className="mb-2 font-sans text-sm font-semibold tracking-normal">Do students agree with the experts?</h3>
+          <ul className="space-y-2">
+            {c.correlations.map((k) => {
+              const v = agreement(k.rho, k.sign);
+              return (
+                <li key={k.label} className="flex items-start justify-between gap-3 rounded-lg border-2 border-line px-3 py-2.5 text-sm">
+                  <span>{k.label}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${v.tone}`}>{v.text}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <details className="mt-2 text-xs text-stone-500">
+            <summary className="cursor-pointer">Statistical details</summary>
+            <p className="mt-1.5">
+              Spearman rank correlation (ρ), from −1 to +1. It needs at least 3 questions and some variation; “–” means not enough
+              data yet.
+            </p>
+            <ul className="mt-1.5 space-y-0.5 tabular-nums">
+              {c.correlations.map((k) => (
+                <li key={k.label}>
+                  ρ = {fmtRho(k.rho)} (n = {k.n}) · expected {k.expect}
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       </div>
       <div>
